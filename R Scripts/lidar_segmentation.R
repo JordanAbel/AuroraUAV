@@ -9,7 +9,7 @@ library(viridis)
 library(usethis)
 usethis::edit_r_environ()
 
-las <- readLAS("C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/points.las",
+las <- readLAS("../points.las",
                select = "xyzr",
                filter = "-drop_z_below 0")
 las_check(las)
