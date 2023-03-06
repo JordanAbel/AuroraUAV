@@ -72,7 +72,6 @@ col <- height.colors(25)
 chm <- rasterize_canopy(nlas, res = 0.5, pitfree(thresholds = c(0, 60), max_edge = c(0, 1.5)))
 # plot(chm, col = col)
 
-# Need to continue working from here!!!!!!!!!!!!
 las <- filter_poi(nlas, Z >= 0)
 
 # Post-processing median filter
@@ -89,26 +88,10 @@ las <- segment_trees(las, algo) # segment point cloud
 crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "convex")
 plot(crowns["convhull_area"], main = "Crown area (convex hull)")
 
-metrics <- crown_metrics(las, ~list(z_max = max(Z), z_mean = mean(Z))) # calculate tree metrics
-head(metrics)
+# metrics <- crown_metrics(las, ~list(z_max = max(Z), z_mean = mean(Z))) # calculate tree metrics
+# head(metrics)
 
 # plot(metrics["z_max"], pal = hcl.colors, pch = 19) # plot using z_max
-
-custom_crown_metrics <- function(z, i) { # user-defined function
-  metrics <- list(
-     z_max = max(z),   # max height
-     z_sd = sd(z),     # vertical variability of points
-     i_mean = mean(i), # mean intensity
-     i_max  = max(i)   # max intensity
-   )
-   return(metrics) # output
-}
-
-ccm <- ~custom_crown_metrics(z = Z, i = Intensity)
-
-metrics <- crown_metrics(las, func = ccm, geom = "convex")
-plot(metrics["z_max"], pal = hcl.colors)
-
 
 tree110 <- filter_poi(las, treeID == 1438)
 plot(tree110, size = 8, bg = "white")
