@@ -8,6 +8,8 @@ library(crayon)
 library(BiocManager)
 library(future)
 library(rgdal)
+library(rayshader)
+library(rgl)
 
 # To change the memory limit of R virtual memory
 # library(usethis)
@@ -23,13 +25,11 @@ message(green("\n[INFO] ", Sys.time(), " Checking .LAS file"))
 las_check(las)
 message(green("\n[INFO] ", Sys.time(), " .LAS file check complete"))
 
-# print(las)
-
 # plot(las, bg = "white")
 
 # removing noise from las file (sor or ivf algo)
 # note: ivf seems to be much faster, unsure if signifigant difference in results is present
-las <- classify_noise(las, ivf(5, 6))
+las <- classify_noise(las, sor(18, 3))
 las <- filter_poi(las, Classification != LASNOISE)
 plot(las, bg = "white")
 
@@ -49,18 +49,18 @@ plot_crossection <- function(las,
 }
 
 las <- classify_ground(las, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
-plot_crossection(las, colour_by = factor(Classification))
+# plot_crossection(las, colour_by = factor(Classification))
 
 gnd <- filter_ground(las)
 # plot(gnd, size = 3, bg = "white", color = "Classification")
 
-dtm <- rasterize_terrain(las, res = 1, knnidw(k = 10L, p = 2))
-plot_dtm3d(dtm, bg = "white")
+dtm <- rasterize_terrain(las, res = 1, knnidw())
+# plot_dtm3d(dtm, bg = "white")
 
 nlas <- normalize_height(las, knnidw())
 plot(nlas, bg = "white")
 
-hist(filter_ground(nlas)$Z, breaks = seq(-50, 50, 0.01), main = "", xlab = "Elevation")
+# hist(filter_ground(nlas)$Z, breaks = seq(-50, 50, 0.01), main = "", xlab = "Elevation")
 
 col <- height.colors(25)
 chm <- rasterize_canopy(nlas, res = 0.5, pitfree(thresholds = c(0, 60), max_edge = c(0, 1.5)))
@@ -84,10 +84,18 @@ las <- segment_trees(las, algo) # segment point cloud
 crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "concave")
 plot(crowns["convhull_area"], main = "Crown area (concave hull)")
 
-hulls <- delineate_crowns(las)
-writeOGR(obj = hulls, dsn = "/Users/Shea/Desktop", layer="crowns", driver="ESRI Shapefile")
-shape <- read_sf(dsn = "/Users/Shea/Desktop/crowns.shp", layer = "SHAPEFILE")
+# =======attempting to transfer tree segments to rgb orthomosaic=======
+trees_sp <- as_Spatial(crowns)
+ortho_rgb <- brick("/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif") # TODO: change path
+trees_sp <- spTransform(trees_sp, crs(ortho_rgb))
+trees_sf <- st_as_sf(trees_sp)
+ortho_rgb_cropped <- crop(ortho_rgb, extent(trees_sp))
+trees_raster <- rasterize(trees_sf, ortho_rgb_cropped)
 
+plotRGB(ortho_rgb_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
+plot(trees_raster, col = "red", add = TRUE)
+
+# ===================================================================
 metrics <- crown_metrics(las, ~list(z_max = max(Z), z_mean = mean(Z))) # calculate tree metrics
 head(metrics)
 
