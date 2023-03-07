@@ -20,6 +20,7 @@ message(green("\n[INFO] ", Sys.time(), " Reading .LAS files"))
 # TODO: Update path to folder location on your local machine
 lasC <- readLAScatalog("/Users/Shea/Desktop/COMP 4910/RGB Data/LiDAR split files/-split1")
 las <- readLAS(lasC, select = "xyzr", filter = "-drop_z_below 0")
+# las <- readLAS("/Users/Shea/Desktop/COMP 4910/RGB Data/points.las", select = "xyzr", filter = "-drop_z_below 0")
 
 message(green("\n[INFO] ", Sys.time(), " Checking .LAS file"))
 las_check(las)
