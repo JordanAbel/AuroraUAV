@@ -28,8 +28,8 @@ message(green("\n[INFO] ", Sys.time(), " .LAS file check complete"))
 # plot(las, bg = "white")
 
 # removing noise from las file (sor or ivf algo)
-# TODO: compare results and run time of ivf and sor
-las <- classify_noise(las, sor(18,4))
+# note: ivf seems to be much faster, unsure if signifigant difference in results is present
+las <- classify_noise(las, ivf(5, 6))
 las <- filter_poi(las, Classification != LASNOISE)
 plot(las, bg = "white")
 
@@ -48,18 +48,14 @@ plot_crossection <- function(las,
   return(p)
 }
 
-mycsf <- csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65)
-las <- classify_ground(las, mycsf)
+las <- classify_ground(las, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
 plot_crossection(las, colour_by = factor(Classification))
 
 gnd <- filter_ground(las)
 # plot(gnd, size = 3, bg = "white", color = "Classification")
 
-dtm_tin <- rasterize_terrain(las, res = 1, algorithm = tin())
-plot_dtm3d(dtm_tin, bg = "white")
-
-dtm <- rasterize_terrain(las, 1, knnidw(k = 10L, p = 2))
-# plot(dtm, col = gray(1:50/50))
+dtm <- rasterize_terrain(las, res = 1, knnidw(k = 10L, p = 2))
+plot_dtm3d(dtm, bg = "white")
 
 nlas <- normalize_height(las, knnidw())
 plot(nlas, bg = "white")
