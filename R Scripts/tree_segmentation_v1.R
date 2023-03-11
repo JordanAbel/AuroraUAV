@@ -12,8 +12,8 @@ library(rayshader)
 library(rgl)
 
 # To change the memory limit of R virtual memory
-# library(usethis)
-# usethis::edit_r_environ()
+Sys.setenv(R_MAX_VSIZE = "100Gb")
+Sys.getenv("R_MAX_VSIZE") # verify that changes has taken effect
 
 message(green("\n[INFO] ", Sys.time(), " Reading .LAS files"))
 
@@ -34,13 +34,13 @@ plot(tiles, chunk = TRUE)
 
 # Read only the specified files of the LAScatalog
 t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
-subset <- readLAS(t_files[1:10])
+subset <- readLAS(t_files[1:5])
 
 plot(subset, bg = "white")
 
 norm_color <- function(l, o) # create user-defined function
 {
-  cn <- classify_noise(l, ivf(4, 5))
+  cn <- classify_noise(l, ivf(18, 2))
   cn <- filter_poi(cn, Classification != LASNOISE) # denoise
   gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
   nl <- normalize_height(gnd, knnidw()) # normalize
