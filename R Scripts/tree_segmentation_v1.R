@@ -17,62 +17,33 @@ Sys.getenv("R_MAX_VSIZE") # verify that change has taken effect
 
 message(green("\n[INFO] ", Sys.time(), " Reading .LAS files"))
 
-# =========================TESTING TILING===================
-
-lasC <- readLAScatalog("/Users/Shea/Desktop/COMP 4910/RGB Data/points.las")
-ortho <- terra::rast("/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif")
-t_dir <- "/Users/Shea/Desktop/COMP 4910/RGB Data/Tiles"
+# TODO: Update paths for local machine
+lasC <- readLAScatalog("/Users/Shea/Desktop/COMP 4910/RGB Data/points.las") # Full ortho .las point cloud
+ortho <- terra::rast("/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif") # Full RGB ortho map
+t_dir <- "/Users/Shea/Desktop/COMP 4910/RGB Data/Tiles" # directory to store tiles after tiling step
 
 opt_output_files(lasC) <- paste0(t_dir, "/{XLEFT}_{YBOTTOM}_{ID}") # label outputs based on coordinates
 opt_chunk_size(lasC) <- 250 # square tile size in meters
 opt_chunk_buffer(lasC) <- 0
-tiles <- catalog_retile(lasC)
-tiles <- readLAScatalog(t_dir)
+# tiles <- catalog_retile(lasC) # Tile full ortho point cloud. **COMMENT OUT AFTER 1 SUCCESSFUL RUN**
+tiles <- readLAScatalog(t_dir) # Read tile folder
 
-plot(tiles, chunk = TRUE)
+# plot(tiles, chunk = TRUE)
 # plotRGB(ortho)
 
-# Read only the specified files of the LAScatalog
+# Read only the specified subset of tiles - for processing speeds & testing purposes
 t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
 subset <- readLAS(t_files[1:5])
 
-plot(subset, color = "RGB", bg = "white")
+# Check subset tiles. Will indicate if there are any invalidities.
+message(green("\n[INFO] ", Sys.time(), " Checking point cloud"))
+las_check(subset)
 
-# Function to denoise and normalize
-noise_norm <- function(l)
-{
-  cn <- classify_noise(l, sor(19, 0.9))
-  cn <- filter_poi(cn, Classification != LASNOISE) # denoise
-  gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
-  nl <- normalize_height(gnd, knnidw()) # normalize
-  return(nl) # output
-}
+plot(subset, bg = "white")
 
 # las <- clip_circle(tiles, 680500, 5605500, 100)
 
-dnlas <- noise_norm(subset)
-
-plot(dnlas, color = "RGB", bg = "white", size = 3)
-
-
-# ====================================================
-
-# TODO: Update path to folder location on your local machine
-# lasC <- readLAScatalog("/Users/Shea/Desktop/COMP 4910/RGB Data/LiDAR split files/-split1")
-# las <- readLAS(lasC, filter = "-drop_z_below 0")
-
-message(green("\n[INFO] ", Sys.time(), " Checking .LAS file"))
-las_check(las)
-message(green("\n[INFO] ", Sys.time(), " .LAS file check complete"))
-
-# plot(las, bg = "white")
-
-# removing noise from las file (sor or ivf algo)
-# note: ivf seems to be much faster, unsure if signifigant difference in results is present
-las <- classify_noise(las, sor(18, 3))
-las <- filter_poi(las, Classification != LASNOISE)
-plot(las, bg = "white")
-
+# Function to plot crossection of point cloud. Illustrates ground/ non-ground points
 plot_crossection <- function(las,
                              p1 = c(min(las@data$X), mean(las@data$Y)),
                              p2 = c(max(las@data$X), mean(las@data$Y)),
@@ -88,24 +59,50 @@ plot_crossection <- function(las,
   return(p)
 }
 
-las <- classify_ground(las, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
-# plot_crossection(las, colour_by = factor(Classification))
+# Function to denoise and normalize point cloud
+noise_norm <- function(l, p, subplots = FALSE)
+{
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying & filtering noise points"))
+  cn <- classify_noise(l, sor(19, 0.9))
+  cn <- filter_poi(cn, Classification != LASNOISE) # drop noise points
 
-gnd <- filter_ground(las)
-# plot(gnd, size = 3, bg = "white", color = "Classification")
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying ground points"))
+  gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
 
-dtm <- rasterize_terrain(las, res = 1, knnidw())
-# plot_dtm3d(dtm, bg = "white")
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Normalizing height"))
+  nl <- normalize_height(gnd, knnidw()) # normalize
+  nl <- filter_poi(nl, Z >= 0) # drop points below zero
 
-nlas <- normalize_height(las, knnidw())
-plot(nlas, bg = "white")
+  # Generate subplots (de-noised, ground, terrain model, normalized, histogram)
+  if (subplots == TRUE)
+  {
+    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Generating subplots"))
 
-# hist(filter_ground(nlas)$Z, breaks = seq(-50, 50, 0.01), main = "", xlab = "Elevation")
+    plot(cn, bg = "white", main = "De-noised Point Cloud")
+    plot_dtm3d((rasterize_terrain(gnd, res = 1, tin())), bg = "white", main = "Terrain Model")
+    plot(nl, bg = "white", main = "Normalized Point Cloud")
+    plot_crossection(nl, colour_by = factor(Classification))
+    hist(filter_ground(nl)$Z, breaks = seq(-50, 50, 0.01), xlab = "Elevation", main = "Elevation Histogram")
+  }
+
+  # plot processed subset point cloud in rgb colour
+  if (p == TRUE)
+    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Generating processed plot in RGB colour"))
+    plot(nl, color = "RGB", bg = "white", size = 3)
+
+  return(nl) # output
+}
+
+nnsub <- noise_norm(subset, TRUE, FALSE)
+
+las_check(nnsub) # check again to ensure noise_norm went well. This may be unnecessary.
+
+# ========================================
 
 col <- height.colors(25)
-# TODO: Find maximum res (lower number) by 6/ point cloud density
-chm <- rasterize_canopy(nlas, res = 0.5, pitfree(thresholds = c(0, 60), max_edge = c(0, 1.5)))
-# plot(chm, col = col)
+# TODO: Calculate & tune res. Start at 6/ point cloud density. Will change depending on subset
+chm <- rasterize_canopy(nnsub, res = 0.08, pitfree(thresholds = c(0, 60), max_edge = c(0, 1.5)))
+plot(chm)
 
 # TODO: Need to continue working from here!!!!!!!!!!!!
 # Z >= n increase n (height) to decrease amount of segmented objects
