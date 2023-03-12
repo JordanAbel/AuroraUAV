@@ -11,9 +11,9 @@ library(rgdal)
 library(rayshader)
 library(rgl)
 
-# To change the memory limit of R virtual memory
+# Increase virtual memory limit of R environment
 Sys.setenv(R_MAX_VSIZE = "100Gb")
-Sys.getenv("R_MAX_VSIZE") # verify that changes has taken effect
+Sys.getenv("R_MAX_VSIZE") # verify that change has taken effect
 
 message(green("\n[INFO] ", Sys.time(), " Reading .LAS files"))
 
@@ -36,23 +36,24 @@ plot(tiles, chunk = TRUE)
 t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
 subset <- readLAS(t_files[1:5])
 
-plot(subset, bg = "white")
+plot(subset, color = "RGB", bg = "white")
 
-norm_color <- function(l, o) # create user-defined function
+# Function to denoise and normalize
+noise_norm <- function(l)
 {
-  cn <- classify_noise(l, ivf(18, 2))
+  cn <- classify_noise(l, sor(19, 0.9))
   cn <- filter_poi(cn, Classification != LASNOISE) # denoise
   gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
   nl <- normalize_height(gnd, knnidw()) # normalize
-  # colorized <- merge_spatial(nl, o) # colorize
   return(nl) # output
 }
 
 # las <- clip_circle(tiles, 680500, 5605500, 100)
 
-nlasrgb <- norm_color(subset, ortho) # apply user defined function
+dnlas <- noise_norm(subset)
 
-plot(nlasrgb, color = "RGB", bg = "white", size = 2)
+plot(dnlas, color = "RGB", bg = "white", size = 3)
+
 
 # ====================================================
 
