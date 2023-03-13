@@ -7,9 +7,10 @@ library(viridis)
 library(crayon)
 library(BiocManager)
 library(future)
-library(rgdal)
+# library(rgdal)
 library(rayshader)
-library(rgl)
+# library(rgl)
+library(viridis)
 
 # Increase virtual memory limit of R environment
 Sys.setenv(R_MAX_VSIZE = "100Gb")
@@ -33,15 +34,14 @@ tiles <- readLAScatalog(t_dir) # Read tile folder
 
 # Read only the specified subset of tiles - for processing speeds & testing purposes
 t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
-subset <- readLAS(t_files[1:5])
+subset <- readLAS(t_files[14:16]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
+# subset <- readLAS(t_files)
 
 # Check subset tiles. Will indicate if there are any invalidities.
 message(green("\n[INFO] ", Sys.time(), " Checking point cloud"))
 las_check(subset)
 
 plot(subset, bg = "white")
-
-# las <- clip_circle(tiles, 680500, 5605500, 100)
 
 # Function to plot crossection of point cloud. Illustrates ground/ non-ground points
 plot_crossection <- function(las,
@@ -59,12 +59,15 @@ plot_crossection <- function(las,
   return(p)
 }
 
-# Function to denoise and normalize point cloud
-noise_norm <- function(l, p, subplots = FALSE)
+# Pre-processing function to denoise and normalize point cloud. Boolean option params to generate plots
+noise_norm <- function(l, p = TRUE, subplots = FALSE)
 {
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Processing", npoints(l), "points"))
   message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying & filtering noise points"))
   cn <- classify_noise(l, sor(19, 0.9))
   cn <- filter_poi(cn, Classification != LASNOISE) # drop noise points
+  diff <- npoints(l) - npoints(cn)
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Removed", diff, "noise points"))
 
   message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying ground points"))
   gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
@@ -78,10 +81,10 @@ noise_norm <- function(l, p, subplots = FALSE)
   {
     message(green("\n[INFO] ", Sys.time(), " noise_norm() - Generating subplots"))
 
+    plot_crossection(nl, colour_by = factor(Classification))
     plot(cn, bg = "white", main = "De-noised Point Cloud")
     plot_dtm3d((rasterize_terrain(gnd, res = 1, tin())), bg = "white", main = "Terrain Model")
     plot(nl, bg = "white", main = "Normalized Point Cloud")
-    plot_crossection(nl, colour_by = factor(Classification))
     hist(filter_ground(nl)$Z, breaks = seq(-50, 50, 0.01), xlab = "Elevation", main = "Elevation Histogram")
   }
 
@@ -93,20 +96,24 @@ noise_norm <- function(l, p, subplots = FALSE)
   return(nl) # output
 }
 
-nnsub <- noise_norm(subset, TRUE, FALSE)
-
-las_check(nnsub) # check again to ensure noise_norm went well. This may be unnecessary.
+nnsub <- noise_norm(subset, TRUE, TRUE)
 
 # ========================================
 
-col <- height.colors(25)
-# TODO: Calculate & tune res. Start at 6/ point cloud density. Will change depending on subset
-chm <- rasterize_canopy(nnsub, res = 0.08, pitfree(thresholds = c(0, 60), max_edge = c(0, 1.5)))
-plot(chm)
+c <- height.colors(25)
+# TODO: Tune base_res. May change depending on subset
+base_res <- (6 / density(nnsub)) + 0.5
+print(base_res)
+chm <- rasterize_canopy(nnsub, res = base_res, pitfree(thresholds = c(0, 60), max_edge = c(0, 1.5)))
+plot(chm, col = c)
 
 # TODO: Need to continue working from here!!!!!!!!!!!!
 # Z >= n increase n (height) to decrease amount of segmented objects
-las <- filter_poi(nlas, Z >= 5)
+z_val <- mean(nnsub$Z)
+print(z_val)
+las <- filter_poi(nnsub, Z >= z_val) # remove points under the average height
+
+# plot(las, bg = "white")
 
 # Post-processing median filter
 kernel <- matrix(1,3,3)
@@ -120,19 +127,24 @@ las <- segment_trees(las, algo) # segment point cloud
 # plot(las, bg = "white", color = "treeID") # visualize trees
 
 crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "concave")
-plot(crowns["convhull_area"], main = "Crown area (concave hull)")
-
+plot(crowns["convhull_area"], main = "Crown area (concave hull)", col = viridis(10))
 
 # =======attempting to transfer tree segments to rgb orthomosaic=======
 trees_sp <- as_Spatial(crowns)
-ortho_rgb <- brick("/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif") # TODO: change path
-trees_sp <- spTransform(trees_sp, crs(ortho_rgb))
-trees_sf <- st_as_sf(trees_sp)
-ortho_rgb_cropped <- crop(ortho_rgb, extent(trees_sp))
-trees_raster <- rasterize(trees_sf, ortho_rgb_cropped)
+trees_sp <- spTransform(trees_sp, crs(ortho))
+# trees_sf <- st_as_sf(trees_sp)
+ortho_rgb_cropped <- crop(ortho, extent(trees_sp), res = NULL)
+# trees_raster <- rasterize(trees_sf, ortho_rgb_cropped)
 
-plotRGB(ortho_rgb_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
-plot(trees_raster, col = "red", add = TRUE)
+png("overlay_full_res.png", res = 300, width = 29812, height = 22605)
+par(mfrow = c(1, 2))
+
+# plotRGB(ortho_rgb_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
+plotRGB(ortho, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
+plot(trees_sp, add = TRUE, border = "red", lwd = 2)
+
+dev.off()
+
 
 # ===================================================================
 metrics <- crown_metrics(las, ~list(z_max = max(Z), z_mean = mean(Z))) # calculate tree metrics
