@@ -5,11 +5,8 @@ library(ggplot2)
 library(terra) # instead of raster
 library(viridis)
 library(crayon)
-library(BiocManager)
-library(future)
-# library(rgdal)
+library(sp)
 library(rayshader)
-# library(rgl)
 library(viridis)
 
 # Increase virtual memory limit of R environment
@@ -113,7 +110,7 @@ z_val <- mean(nnsub$Z)
 print(z_val)
 las <- filter_poi(nnsub, Z >= z_val) # remove points under the average height
 
-# plot(las, bg = "white")
+plot(las, bg = "white")
 
 # Post-processing median filter
 kernel <- matrix(1,3,3)
@@ -124,9 +121,11 @@ ttops_chm_p2r_1_smoothed <- locate_trees(chm_p2r_1_smoothed, lmf(5 ))
 
 algo <- dalponte2016(chm_p2r_1_smoothed, ttops_chm_p2r_1_smoothed)
 las <- segment_trees(las, algo) # segment point cloud
-# plot(las, bg = "white", color = "treeID") # visualize trees
+plot(las, bg = "white", color = "treeID") # visualize trees
 
 crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "concave")
+# TODO: Modify to drop segments of either too little points or small area
+crowns <- filter_poi(crowns, npoints >= 100)
 plot(crowns["convhull_area"], main = "Crown area (concave hull)", col = viridis(10))
 
 # =======attempting to transfer tree segments to rgb orthomosaic=======
@@ -136,14 +135,10 @@ trees_sp <- spTransform(trees_sp, crs(ortho))
 ortho_rgb_cropped <- crop(ortho, extent(trees_sp), res = NULL)
 # trees_raster <- rasterize(trees_sf, ortho_rgb_cropped)
 
-png("overlay_full_res.png", res = 300, width = 29812, height = 22605)
-par(mfrow = c(1, 2))
-
-# plotRGB(ortho_rgb_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
-plotRGB(ortho, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
+plotRGB(ortho_rgb_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
+# plotRGB(ortho, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
 plot(trees_sp, add = TRUE, border = "red", lwd = 2)
 
-dev.off()
 
 
 # ===================================================================
