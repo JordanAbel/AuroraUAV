@@ -9,7 +9,7 @@ library(viridis)
 library(usethis)
 usethis::edit_r_environ()
 
-las <- readLAS("../points.las",
+las <- readLAS("../RGB Data/points.las",
                select = "xyzr",
                filter = "-drop_z_below 0")
 las_check(las)

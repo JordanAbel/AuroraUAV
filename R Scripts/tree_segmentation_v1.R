@@ -9,6 +9,14 @@ library(sp)
 library(rayshader)
 library(viridis)
 
+# library(BiocManager)
+# library(lidR.li2012enhancement)
+
+# # Install custom package
+# install.packages("BiocManager")
+# BiocManager::install("EBImage")
+# devtools::install_github("mcoghill/lidR.li2012enhancement")
+
 # Increase virtual memory limit of R environment
 Sys.setenv(R_MAX_VSIZE = "100Gb")
 Sys.getenv("R_MAX_VSIZE") # verify that change has taken effect
@@ -16,9 +24,9 @@ Sys.getenv("R_MAX_VSIZE") # verify that change has taken effect
 message(green("\n[INFO] ", Sys.time(), " Reading .LAS files"))
 
 # TODO: Update paths for local machine
-lasC <- readLAScatalog("/Users/Shea/Desktop/COMP 4910/RGB Data/points.las") # Full ortho .las point cloud
-ortho <- terra::rast("/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif") # Full RGB ortho map
-t_dir <- "/Users/Shea/Desktop/COMP 4910/RGB Data/Tiles" # directory to store tiles after tiling step
+lasC <- readLAScatalog("C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/points.las") # Full ortho .las point cloud
+ortho <- terra::rast("C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/rgb_map.tif") # Full RGB ortho map
+t_dir <- "C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/Tiles" # directory to store tiles after tiling step
 
 opt_output_files(lasC) <- paste0(t_dir, "/{XLEFT}_{YBOTTOM}_{ID}") # label outputs based on coordinates
 opt_chunk_size(lasC) <- 250 # square tile size in meters
@@ -38,7 +46,7 @@ subset <- readLAS(t_files[14:16]) # t_files[n:m] = file position in order. Delet
 message(green("\n[INFO] ", Sys.time(), " Checking point cloud"))
 las_check(subset)
 
-plot(subset, bg = "white")
+# plot(subset, bg = "white")
 
 # Function to plot crossection of point cloud. Illustrates ground/ non-ground points
 plot_crossection <- function(las,
@@ -93,39 +101,49 @@ noise_norm <- function(l, p = TRUE, subplots = FALSE)
   return(nl) # output
 }
 
-nnsub <- noise_norm(subset, TRUE, TRUE)
+nnsub <- noise_norm(subset, FALSE, FALSE)
 
 # ========================================
 
 c <- height.colors(25)
 # TODO: Tune base_res. May change depending on subset
-base_res <- (6 / density(nnsub)) + 0.5
+base_res <- (6 / density(nnsub))
 print(base_res)
-chm <- rasterize_canopy(nnsub, res = base_res, pitfree(thresholds = c(0, 60), max_edge = c(0, 1.5)))
+chm <- rasterize_canopy(nnsub, res = base_res,
+                        pitfree(subcircle = 0.15,
+                                thresholds = c(0,5,10,15,20,25,30,35,40),
+                                max_edge = c(0, 2)
+                        )
+)
 plot(chm, col = c)
 
-# TODO: Need to continue working from here!!!!!!!!!!!!
-# Z >= n increase n (height) to decrease amount of segmented objects
-z_val <- mean(nnsub$Z)
-print(z_val)
-las <- filter_poi(nnsub, Z >= z_val) # remove points under the average height
+# This function will create the window size based off of the tree height
+variable_ws <- function(x) {
+  y <- 2.6 * (-(exp(-0.08*(x-2)) - 1)) + 3
+  y[x < 2] <- 3
+  y[x > 20] <- 5
+  return(y)
+}
 
-plot(las, bg = "white")
+# Pitfree with and subcircle tweak
+chm_pitfree_05_2 <- rasterize_canopy(las, 0.5, pitfree(
+  subcircle = 0.15,
+  thresholds = c(0,5,10,15,20,25,30,35,40),
+  max_edge = c(0, 2)
+), pkg = "terra")
 
-# Post-processing median filter
-kernel <- matrix(1,3,3)
-chm_p2r_1 <- rasterize_canopy(las, 1, p2r(subcircle = 0.2), pkg = "terra")
-chm_p2r_1_smoothed <- terra::focal(chm_p2r_1, w = kernel, fun = median, na.rm = TRUE)
+ttops_chm_pitfree_05_2 <- locate_trees(chm_pitfree_05_2, lmf(variable_ws))
 
-ttops_chm_p2r_1_smoothed <- locate_trees(chm_p2r_1_smoothed, lmf(5 ))
+plot(chm_pitfree_05_2, main = "CHM PITFREE 2", col = col); plot(sf::st_geometry(ttops_chm_pitfree_05_2), add = T, pch =3)
 
-algo <- dalponte2016(chm_p2r_1_smoothed, ttops_chm_p2r_1_smoothed)
+algo <- dalponte2016(chm_pitfree_05_2, ttops_chm_pitfree_05_2)
 las <- segment_trees(las, algo) # segment point cloud
 plot(las, bg = "white", color = "treeID") # visualize trees
 
 crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "concave")
 # TODO: Modify to drop segments of either too little points or small area
-crowns <- filter_poi(crowns, npoints >= 100)
+q_val <- quantile(crowns$convhull_area, 0.12)
+crowns <- crowns[crowns$convhull_area >= q_val,]
 plot(crowns["convhull_area"], main = "Crown area (concave hull)", col = viridis(10))
 
 # =======attempting to transfer tree segments to rgb orthomosaic=======
@@ -137,7 +155,7 @@ ortho_rgb_cropped <- crop(ortho, extent(trees_sp), res = NULL)
 
 plotRGB(ortho_rgb_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
 # plotRGB(ortho, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
-plot(trees_sp, add = TRUE, border = "red", lwd = 2)
+plot(trees_sp, add = TRUE, border = "red", lwd = 1)
 
 
 
