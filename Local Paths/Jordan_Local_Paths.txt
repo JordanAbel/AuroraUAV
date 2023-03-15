@@ -1,0 +1,3 @@
+lasC <- readLAScatalog("C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/points.las") # Full ortho .las point cloud
+ortho <- terra::rast("C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/rgb_map.tif") # Full RGB ortho map
+t_dir <- "C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/Tiles" # directory to store tiles after tiling step
