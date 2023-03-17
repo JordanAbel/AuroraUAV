@@ -102,22 +102,23 @@ noise_norm <- function(l, p = TRUE, subplots = FALSE)
 }
 
 nnsub <- noise_norm(subset, FALSE, FALSE)
+las <- nnsub
 
 # ========================================
 
 c <- height.colors(25)
 # TODO: Tune base_res. May change depending on subset
-base_res <- (6 / density(nnsub))
+base_res <- (6 / density(las))
 print(base_res)
-chm <- rasterize_canopy(nnsub, res = base_res,
+chm <- rasterize_canopy(las, res = 0.5,
                         pitfree(subcircle = 0.15,
                                 thresholds = c(0,5,10,15,20,25,30,35,40),
-                                max_edge = c(0, 2)
+                                max_edge = c(0, 1.5)
                         )
 )
 plot(chm, col = c)
 
-# This function will create the window size based off of the tree height
+# This function will create the window size based off of the tree height <--- for review
 variable_ws <- function(x) {
   y <- 2.6 * (-(exp(-0.08*(x-2)) - 1)) + 3
   y[x < 2] <- 3
@@ -132,7 +133,7 @@ chm_pitfree_05_2 <- rasterize_canopy(las, 0.5, pitfree(
   max_edge = c(0, 2)
 ), pkg = "terra")
 
-ttops_chm_pitfree_05_2 <- locate_trees(chm_pitfree_05_2, lmf(variable_ws))
+ttops_chm_pitfree_05_2 <- locate_trees(chm_pitfree_05_2, lmf(variable_ws)) # <-- function used here
 
 plot(chm_pitfree_05_2, main = "CHM PITFREE 2", col = col); plot(sf::st_geometry(ttops_chm_pitfree_05_2), add = T, pch =3)
 
