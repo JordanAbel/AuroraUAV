@@ -167,5 +167,54 @@ head(metrics)
 
 plot(metrics["z_max"], pal = hcl.colors)
 
-tree110 <- filter_poi(las, treeID == 282)
-plot(tree110, bg = "white")
+tree282 <- filter_poi(las, treeID == 282)
+plot(tree282, bg = "white")
+
+
+
+
+#===========[CAP-35]- Applying VARI on segmented tree========================
+
+
+# transfering tree segments to rgb orthomosaic
+trees_sp <- as_Spatial(crowns)
+trees_sp <- spTransform(trees_sp, crs(ortho))
+
+# tree polygon for the tree with ID 203
+trees_sp_203 <- trees_sp[trees_sp$treeID == 203, ]
+
+bbox <- st_bbox(trees_sp_203)
+
+ortho_203<- crop(ortho, terra::ext(bbox))
+
+library(exactextractr)
+
+# converting tree polygon from SpatialPolygonsDataFrame to sf object
+trees_sp_203_sf <- sf::st_as_sf(trees_sp_203)
+
+# calculating the VARI index for the tree203 raster
+R <- ortho_tree203[[1]]
+G <- ortho_tree203[[2]]
+B <- ortho_tree203[[3]]
+
+VARI <- (G - R) / (G + R - B)
+
+# seting negative infinity values to NA in case if the denominator in the VARI equation is zero
+VARI[VARI == -Inf] <- NA
+
+# unmasked VARI i.e has the sorroundings around the segmented tree
+terra::writeRaster(VARI, "VARI_tree203.tif", overwrite = TRUE)
+terra::plot(VARI)
+
+
+
+
+trees_sp_203_vect <- terra::vect(trees_sp_203_sf)
+
+# creating a mask using the tree203 polygon and then masking it
+mask <- terra::rasterize(trees_sp_203_vect, ortho_tree203, field = 1)
+masked_VARI <- terra::mask(VARI, mask, inverse = FALSE)
+
+terra::writeRaster(masked_VARI, "masked_VARI_tree203.tif", overwrite = TRUE)
+
+terra::plot(masked_VARI)
