@@ -1,36 +1,67 @@
-# Required Packages
-library(lidR)
-library(sf)
-library(ggplot2)
-library(terra) # instead of raster
-library(crayon)
-library(sp)
-library(viridis)
+# ***** THESE VARIABLES MUST BE UPDATED FOR EVERY NEW DATA SET *****
+# ===============================================================================================
+# Copy file paths to corresponding full orthomosaic map and point cloud .LAS files
+# ortho_path <- "path_to_orthomosaic_map_file.tif"
+# las_path <- "path_to_point_cloud_file.las"
+t_size <- 250 # Point cloud tile size in square meters. Greater than 250.
+t_buffer <- 0 # Buffer size around each tile in meters.
 
-# Increase virtual memory limit of R environment
+ortho_path <- "/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif"
+las_path <- "/Users/Shea/Desktop/COMP 4910/RGB Data/points.las"
+# ===============================================================================================
+
+# Automatically install and load required packages into R session
+pkg_file <- "requirements.txt"
+pkg_list <- readLines(pkg_file)
+
+# Check for the existence of each package and install if necessary
+cran_mirror <- "https://cran.r-project.org" # Set the CRAN mirror to use for package installations
+for (pkg_name in pkg_list) {
+  if (!require(pkg_name, character.only = TRUE)) {
+    install.packages(pkg_name, repos = cran_mirror)
+    if (!require(pkg_name, character.only = TRUE)) {
+      stop("Failed to install package: ", pkg_name)
+    }
+  }
+  library(pkg_name, character.only = TRUE)
+}
+
+# Automatically increase virtual memory limit of R environment
 Sys.setenv(R_MAX_VSIZE = "100Gb")
 Sys.getenv("R_MAX_VSIZE") # verify that change has taken effect
 
-message(green("\n[INFO] ", Sys.time(), " Reading .LAS files"))
+message(green("\n[INFO] ", Sys.time(), " Reading point cloud"))
+lasC <- readLAScatalog(las_path) # Full ortho point cloud
+ortho <- terra::rast(ortho_path) # Full RGB ortho map
 
-# TODO: Update paths for local machine
-lasC <- readLAScatalog("/Users/Shea/Desktop/COMP 4910/RGB Data/points.las") # Full ortho .las point cloud
-ortho <- terra::rast("/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif") # Full RGB ortho map
-t_dir <- "/Users/Shea/Desktop/COMP 4910/RGB Data/Tiles" # directory to store tiles after tiling step
+# Function to read point cloud file and perform tiling.
+pc_read_tile <- function(cat, t_size, t_buff) {
+  # Create directory to store tiles if it does not exist yet
+  if(!file.exists("Tiles")){
+    dir.create("Tiles")
+    t_dir <- "Tiles"
+  } else {
+    t_dir <- "Tiles"
+  }
 
-opt_output_files(lasC) <- paste0(t_dir, "/{XLEFT}_{YBOTTOM}_{ID}") # label outputs based on coordinates
-opt_chunk_size(lasC) <- 250 # square tile size in meters
-opt_chunk_buffer(lasC) <- 0
-# tiles <- catalog_retile(lasC) # Tile full ortho point cloud. **COMMENT OUT AFTER 1 SUCCESSFUL RUN**
-tiles <- readLAScatalog(t_dir) # Read tile folder
+  # Check if directory is empty to determine if tiling has been done. Perform tiling if it is.
+  if(length(list.files(t_dir)) == 0) {
+    message(green("\n[INFO] ", Sys.time(), " Tiling point cloud. This may take a while."))
+    opt_output_files(cat) <- paste0(t_dir, "/{XLEFT}_{YBOTTOM}_{ID}") # label outputs based on coordinates
+    opt_chunk_size(cat) <- t_size # square tile size in meters
+    opt_chunk_buffer(cat) <- t_buff # buffer around each tile
+    catalog_retile(cat) # Tile full ortho point cloud.
+  }
 
-# plot(tiles, chunk = TRUE)
-# plotRGB(ortho)
+  # Read only the specified subset of tiles - for processing speeds & testing purposes
+  t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
+  subset <- readLAS(t_files[8:10]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
+  # subset <- readLAS(t_files) # TODO: delete small subset line above to always do full file
 
-# Read only the specified subset of tiles - for processing speeds & testing purposes
-t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
-# subset <- readLAS(t_files[8:10]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
-subset <- readLAS(t_files)
+  return(subset)
+}
+
+subset <- pc_read_tile(lasC, t_size = t_size, t_buff = t_buffer)
 
 # Check subset tiles. Will indicate if there are any invalidities.
 message(green("\n[INFO] ", Sys.time(), " Checking point cloud"))
@@ -144,44 +175,92 @@ q_val <- quantile(crowns$convhull_area, 0.12)
 crowns <- crowns[crowns$convhull_area >= q_val,]
 # plot(crowns["convhull_area"], main = "Crown area (concave hull)", col = viridis(10))
 
-# ======Testing adding column to crowns data table======
+# ======Crowns data frame manipulation and export for manual labelling======
 ct <- crowns
 
-# Adding new column
-ct$species <- 1 # add int value representing species to every row
+ct$species <- 0 # Add empty column to make manual work easier
 
-# deleteing column
-ct$species <- NULL
+ct_export <- ct[, c("treeID", "species")] # Select only treeID and species columns
+ct_export$geometry <- NULL # Delete geometry column (this was somehow staying included in previous line)
 
-# modifying rows
-ct$species <- 2 # update all rows of species column
-ct$species[ct$treeID == 2100] <- 1 # updating species value of treeID 4
-ct$species[ct$treeID %in% c(3, 5, 7)] <- 3 # updating all rows with treeID 3, 5, 7 to 3
+write.csv(ct_export, file = "segment_list.csv", row.names = FALSE) # Write to .csv for manual identification
 
-head(ct)
+# Import csv and add column to data frame after manual labelling is completed.
+labelled <- read.csv("segment_list.csv")
 
-# ===exporting data===
+ct_col <- labelled$species[match(ct$treeID, labelled$treeID)]
 
-st_write(ct, "labelled_polygons_test.geojson", driver = "GeoJSON")
+ct$species <- ct_col
 
-# below code to create trees_sp has to be run first
-# st_write(trees_sp, "spatial_polygons_test.geojson", driver = "GeoJSON") # doesnt work due to sp format.
+# Below are examples of how to manipulate data frame data
+# # modifying rows
+# ct$species <- 2 # update all rows of species column
+# ct$species[ct$treeID == 2100] <- 1 # updating species value of treeID 4
+# ct$species[ct$treeID %in% c(3, 5, 7)] <- 3 # updating all rows with treeID 3, 5, 7 to 3
 
-# =========================================
+# ========================================================
 
 # Overlay tree segments to corresponding rgb orthomosaic section
 trees_sp <- spTransform(as_Spatial(crowns), crs(ortho))
 ortho_cropped <- crop(ortho, extent(subset))
 
-png(filename="plot1.png", width = 6000, height = 6000, units = "px") # initialize png output for plot
+png(filename="cropped_overlay.png", width = 29812, height = 33605, res = 300, units = "px") # initialize png output for plot
 
 plotRGB(ortho_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
-plot(trees_sp, add = TRUE, border = "red", lwd = 1.5)
+plot(trees_sp, border = "red", lwd = 1.5, bg = "transparent")
 text(trees_sp, labels = trees_sp@data$treeID, cex = 1.1, col = "red")
 dev.off() # save png after plotting data
+# *** Above lines work for overlaying, but output rgb image at low resolution ***
 
 
-# plot(trees_sp, border = "red", lwd = 1.5)
+
+library(stars)
+
+trees_sp <- spTransform(as_Spatial(crowns), crs(ortho))
+cropped <- crop(ortho, trees_sp)
+
+m <- as.data.frame(cropped, xy = TRUE)
+merged <- terra::merge(trees_sp, m)
+
+
+png(filename="res_test_2.png", width = 6000, height = 6000, units = "px") # initialize png output for plot
+# plot(o_stars, rgb = 1:3)
+plotRGB(r)
+dev.off()
+
+cropped_stars <- st_as_stars(cropped)
+
+plot(cropped_stars)
+
+trees_stars <- st_as_stars(trees_sp, crs = st_crs(cropped_stars))
+
+
+
+png(filename="cropped_ortho1.png", width = 29812, height = 33605, res = 300, units = "px") # initialize png output for plot
+
+plot(cropped_stars)
+
+dev.off()
+
+plot(cropped_stars, rgb = 1:3, alpha(0.5))
+plot(trees_sp, border = "red", lwd = 1.5, add = TRUE)
+# text(trees_sp, labels = trees_sp@data$treeID, cex = 1.1, col = "red")
+
+
+dev.off()
+
+plotRGB(cr, r = 1, g = 2, b = 3)
+
+plot(cropped_stars, rgb = 1:3, add = FALSE)
+# plotRGB(cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
+# plot(trees_sp, add = TRUE, border = "red", lwd = 1.5)
+# text(trees_sp, labels = trees_sp@data$treeID, cex = 1.1, col = "red")
+
+# plotRGB(ortho_r)
+
+dev.off()
+
+
 
 
 # =====Testing merging polygons with rgb for ML algo data=====
