@@ -5,13 +5,15 @@
 # las_path <- "path_to_point_cloud_file.las"
 t_size <- 250 # Point cloud tile size in square meters. Greater than 250.
 t_buffer <- 0 # Buffer size around each tile in meters.
+all_plots <- FALSE # Output all subplots from point cloud (ground model, canopy, etc) TRUE or FALSE
 
 ortho_path <- "/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif"
 las_path <- "/Users/Shea/Desktop/COMP 4910/RGB Data/points.las"
 # ===============================================================================================
 
+
 # Automatically install and load required packages into R session
-pkg_file <- "requirements.txt"
+pkg_file <- "R_requirements.txt"
 pkg_list <- readLines(pkg_file)
 
 # Check for the existence of each package and install if necessary
@@ -127,13 +129,12 @@ noise_norm <- function(l, p, subplots)
   return(nl) # output
 }
 
-nnsub <- noise_norm(subset, FALSE, FALSE)
+las <- noise_norm(subset, FALSE, all_plots)
 
 # ===========================================================================================
 # POINT CLOUD POST-PROCESSING
 # ===========================================================================================
 
-las <- nnsub
 c <- height.colors(25)
 # Tune base_res. May change depending on subset
 base_res <- (6 / density(nnsub))
@@ -170,12 +171,12 @@ las <- segment_trees(las, algo) # segment point cloud
 
 
 crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "concave")
-# TODO: Modify to drop segments of either too little points or small area
 q_val <- quantile(crowns$convhull_area, 0.12)
 crowns <- crowns[crowns$convhull_area >= q_val,]
 # plot(crowns["convhull_area"], main = "Crown area (concave hull)", col = viridis(10))
 
 # ======Crowns data frame manipulation and export for manual labelling======
+#TODO: Remove all ct lines. work with oroginal crowns DF
 ct <- crowns
 
 ct$species <- 0 # Add empty column to make manual work easier
@@ -188,13 +189,9 @@ write.csv(ct_export, file = "segment_list.csv", row.names = FALSE) # Write to .c
 # Import csv and add column to data frame after manual labelling is completed.
 labelled <- read.csv("segment_list.csv")
 
-ct_col <- labelled$species[match(ct$treeID, labelled$treeID)]
+ct$species <- labelled$species[match(ct$treeID, labelled$treeID)]
 
-ct$species <- ct_col
-
-# Below are examples of how to manipulate data frame data
-# # modifying rows
-# ct$species <- 2 # update all rows of species column
+# Below are examples of how to manipulate data frame data in R
 # ct$species[ct$treeID == 2100] <- 1 # updating species value of treeID 4
 # ct$species[ct$treeID %in% c(3, 5, 7)] <- 3 # updating all rows with treeID 3, 5, 7 to 3
 
@@ -204,7 +201,7 @@ ct$species <- ct_col
 trees_sp <- spTransform(as_Spatial(crowns), crs(ortho))
 ortho_cropped <- crop(ortho, extent(subset))
 
-png(filename="cropped_overlay.png", width = 29812, height = 33605, res = 300, units = "px") # initialize png output for plot
+png(filename= "cropped_overlay.png", width = 29812, height = 33605, res = 300, units = "px") # initialize png output for plot
 
 plotRGB(ortho_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
 plot(trees_sp, border = "red", lwd = 1.5, bg = "transparent")
