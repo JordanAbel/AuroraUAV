@@ -277,7 +277,7 @@ class RThread(threading.Thread):
 			# 	print("Error:", e.output.decode())
 			
 			while True:
-				output = process.stdout.readline()
+				output = process.stdout.readline() + process.stderr.readline()
 				if output == b'' and process.poll() is not None:
 					break
 				if output:
