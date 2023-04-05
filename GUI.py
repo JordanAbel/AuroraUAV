@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, ttk
 from tkinter.font import Font
 from PIL import ImageTk, Image
 import subprocess, os, threading, sys
@@ -65,41 +65,50 @@ class MainWindow(tk.Frame):
 		self.cross_var = tk.BooleanVar(value=False)
 		self.cross_button = tk.Checkbutton(tog_container, text="Cross", variable=self.cross_var)
 		self.cross_button.grid(row=2, column=0)
+		Tooltip(self.cross_button, "2D plot of cross-section of terrain")
 		
 		# 3d Digital terrain model
 		self.dtm_var = tk.BooleanVar(value=False)
 		self.dtm_button = tk.Checkbutton(tog_container, text="DTM", variable=self.dtm_var)
 		self.dtm_button.grid(row=2, column=1)
+		Tooltip(self.dtm_button, "3D plot of digital terrain model")
 		
 		# 3D Normalized (flat ground) point cloud. Heat Map colouring
 		self.n_normalized_var = tk.BooleanVar(value=False)
 		self.n_normalized_button = tk.Checkbutton(tog_container, text="Non-norm", variable=self.n_normalized_var)
 		self.n_normalized_button.grid(row=2, column=2)
+		Tooltip(self.n_normalized_button, "3D plot of non-normalized \n"
+		                                  "(non-flattened) point cloud in heat map colouring")
 		
 		# 3D Normalized (flat ground) point cloud. Heat Map colouring
 		self.normalized_var = tk.BooleanVar(value=False)
 		self.normalized_button = tk.Checkbutton(tog_container, text="Norm", variable=self.normalized_var)
 		self.normalized_button.grid(row=2, column=3)
+		Tooltip(self.normalized_button, "3D plot of normalized (flattened) point cloud in heat map colouring")
 		
 		# 3D rgb point cloud
 		self.rgb_var = tk.BooleanVar(value=False)
 		self.rgb_button = tk.Checkbutton(tog_container, text="RGB", variable=self.rgb_var)
 		self.rgb_button.grid(row=2, column=4)
+		Tooltip(self.rgb_button, "3D plot of normalized (flattened) point cloud in RGB colouring")
 		
 		# 2D located trees
 		self.canopy_var = tk.BooleanVar(value=False)
 		self.canopy_button = tk.Checkbutton(tog_container, text="Canopy", variable=self.canopy_var)
 		self.canopy_button.grid(row=2, column=5)
+		Tooltip(self.canopy_button, "2D plot of overhead view of tree canopy with crown markers")
 		
 		# 3D segments
 		self.segments_var = tk.BooleanVar(value=False)
 		self.segments_button = tk.Checkbutton(tog_container, text="Segments", variable=self.segments_var)
 		self.segments_button.grid(row=2, column=6)
+		Tooltip(self.segments_button, "3D plot of automatically generated tree segments")
 		
 		# 2D segments - rgb overlay
 		self.overlay_var = tk.BooleanVar(value=False)
 		self.overlay_button = tk.Checkbutton(tog_container, text="Overlay", variable=self.overlay_var)
 		self.overlay_button.grid(row=2, column=7)
+		Tooltip(self.overlay_button, "2D plot of tree segments overlayed on orthomosaic map")
 		
 		# create inputs
 		self.toggle_label = tk.Label(in_container, text="Point Cloud Tile Params:")
@@ -129,7 +138,7 @@ class MainWindow(tk.Frame):
 		# create output text box
 		self.toggle_button = tk.Button(text_container, text="Show Output", command=self.toggle_textbox)
 		self.toggle_button.grid(row=0, column=0)
-		self.textbox = tk.Text(text_container, height=15)
+		self.textbox = tk.Text(text_container, height=10)
 		self.textbox.grid(row=1, column=0)
 		
 		# place containers on GUI
@@ -138,7 +147,7 @@ class MainWindow(tk.Frame):
 		tog_container.place(relx=0.5, rely=0.4, anchor="center")
 		in_container.place(relx=0.5, rely=0.53, anchor="center")
 		btn_container.place(relx=0.5, rely=0.63, anchor="center")
-		text_container.place(relx=0.5, rely=0.9, anchor="center")
+		text_container.place(relx=0.5, rely=0.855, anchor="center")
 		self.textbox.grid_remove()
 		
 	def browse_ortho(self):
@@ -166,7 +175,7 @@ class MainWindow(tk.Frame):
 	def run_segmentation(self):
 		self.run_button.config(state="disabled")
 		self.textbox.delete("1.0", tk.END)
-		self.textbox.grid()
+		self.toggle_textbox()
 		# Get the input values from the GUI
 		# Paths
 		ortho_path = self.ortho_path.cget("text")
@@ -281,12 +290,14 @@ class RThread(threading.Thread):
 				if output == b'' and process.poll() is not None:
 					break
 				if output:
+					output = output.decode('utf-8')
 					print(output)
-					self.text_box.insert("1.0", output)
+					self.text_box.insert(tk.END, output)
+					self.text_box.see(tk.END)
 				if self.stop_flag.is_set():
 					process.terminate()
 					text = "Process terminated by user"
-					self.text_box.insert("1.0", text)
+					self.text_box.insert(tk.END, text)
 					break
 			rc = process.poll()
 			return rc
@@ -295,6 +306,29 @@ class RThread(threading.Thread):
 			print("Error:", e.output.decode())
 
 
+class Tooltip:
+	def __init__(self, widget, text):
+		self.widget = widget
+		self.text = text
+		self.widget.bind("<Enter>", self.show)
+		self.widget.bind("<Leave>", self.hide)
+		self.widget.bind("<ButtonPress>", self.hide)
+		
+	def show(self, event=None):
+		x, y, cx, cy = self.widget.bbox("insert")
+		x += self.widget.winfo_rootx() + 25
+		y += self.widget.winfo_rooty() + 20
+		self.tw = tk.Toplevel(self.widget)
+		self.tw.wm_overrideredirect(True)
+		self.tw.wm_geometry("+%d+%d" % (x, y))
+		label = tk.Label(self.tw, text=self.text, justify="left", relief="solid", borderwidth=1)
+		label.pack(ipadx=1)
+		
+	def hide(self, event=None):
+		if self.tw:
+			self.tw.destroy()
+		    
+		    
 if __name__ == "__main__":
 	root = tk.Tk()
 	root.title("Aurora UAV: Tree ID v2")
