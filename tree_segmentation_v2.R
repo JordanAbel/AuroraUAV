@@ -1,34 +1,9 @@
-
-
-# Loading args from command GUI
+# Load args from GUI
 args <- commandArgs(trailingOnly = TRUE)
 
-# Paths
-ortho_path <- args[1]
-las_path <- args[2]
-
-# Tile params
-t_size <- args[3]
-t_buffer <- args[4]
-
-# plots booleans
-cross_plt <- args[5]
-dtm_plt <- args[6]
-non_norm <- args[7]
-norm_plt <- args[8]
-rgb_plt <- args[9]
-canopy_plt <- args[10]
-seg_plt <- args[11]
-overlay__plt <- args[12]
-
-plt_list <- args[5:12]
-
-print(plt_list)
-print(ortho_path)
-print(las_path)
-
 # Automatically install and load required packages into R session
-pkg_file <- "R_requirements.txt"
+cwd <- args[4] # Obtain execution directory from GUI
+pkg_file <- paste0(cwd, "/R_requirements.txt")
 pkg_list <- readLines(pkg_file)
 
 # Check for the existence of each package and install if necessary
@@ -45,7 +20,32 @@ for (pkg_name in pkg_list) {
 
 # Automatically increase virtual memory limit of R environment
 Sys.setenv(R_MAX_VSIZE = "100Gb")
-Sys.getenv("R_MAX_VSIZE") # verify that change has taken effect
+# Sys.getenv("R_MAX_VSIZE") # verify that change has taken effect
+
+# Paths
+ortho_path <- args[1]
+las_path <- args[2]
+sd_path <- args[3]
+
+# Tile params
+t_size <- as.numeric(args[5])
+t_buffer <- as.numeric(args[6])
+
+# plots booleans
+cross_plt <- args[7]
+dtm_plt <- args[8]
+non_norm <- args[9]
+norm_plt <- args[10]
+rgb_plt <- args[11]
+canopy_plt <- args[12]
+seg_plt <- args[13]
+overlay__plt <- args[14]
+
+plt_list <- args[7:14]
+
+# print(plt_list)
+# print(ortho_path)
+# print(las_path)
 
 message(green("\n[INFO] ", Sys.time(), " Reading point cloud"))
 lasC <- readLAScatalog(las_path) # Full ortho point cloud
@@ -54,12 +54,15 @@ ortho <- terra::rast(ortho_path) # Full RGB ortho map
 # Function to read point cloud file and perform tiling.
 pc_read_tile <- function(cat, t_size, t_buff) {
   # Create directory to store tiles if it does not exist yet
-  if(!file.exists("Tiles")){
-    dir.create("Tiles")
-    t_dir <- "Tiles"
+  loc <- paste0(sd_path, "/Tiles")
+  if(!file.exists(loc)){
+    dir.create(loc)
+    t_dir <- loc
   } else {
-    t_dir <- "Tiles"
+    t_dir <- loc
   }
+
+  print(t_dir)
 
   # Check if directory is empty to determine if tiling has been done. Perform tiling if it is.
   if(length(list.files(t_dir)) == 0) {
@@ -77,6 +80,7 @@ pc_read_tile <- function(cat, t_size, t_buff) {
 
   return(subset)
 }
+
 
 subset <- pc_read_tile(lasC, t_size = t_size, t_buff = t_buffer)
 
@@ -109,62 +113,76 @@ plot_crossection <- function(las,
 # Pre-processing function to denoise and normalize point cloud
 noise_norm <- function(l)
 {
-  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Processing", npoints(l), "points"))
-  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying & filtering noise points"))
-  cn <- classify_noise(l, sor(19, 0.9))
-  cn <- filter_poi(cn, Classification != LASNOISE) # drop noise points
-  diff <- npoints(l) - npoints(cn)
-  per <- round((diff / npoints(l)) * 100, 2)
-  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Removed", diff, "noise points (", per, "% )"))
+  f_name <- "/noise_norm"
+  nn_loc <- paste0(sd_path, f_name)
+  if(!file.exists(nn_loc)){
+    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Processing", npoints(l), "points"))
+    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying & filtering noise points"))
+    cn <- classify_noise(l, sor(19, 0.9))
+    cn <- filter_poi(cn, Classification != LASNOISE) # drop noise points
+    diff <- npoints(l) - npoints(cn)
+    per <- round((diff / npoints(l)) * 100, 2)
+    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Removed", diff, "noise points (", per, "% )"))
 
-  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying ground points"))
-  gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
+    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying ground points"))
+    gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
 
-  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Normalizing height"))
-  nl <- normalize_height(gnd, knnidw()) # normalize
-  nl <- filter_poi(nl, Z >= 0) # drop points below zero
+    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Normalizing height"))
+    nl <- normalize_height(gnd, knnidw()) # normalize
+    nl <- filter_poi(nl, Z >= 0) # drop points below zero
 
-  out <- list(nl, gnd, cn)
+    out <- list(nl, gnd, cn)
 
-  print("DONE NOISE NORM")
-  return(out) # output
+    write.csv(out, nn_loc, row.names=FALSE)
+
+    return(out) # output
+  } else {
+    return(out) # output
+  }
+
+}
+
+gen_plots <- function (pc, plt_list)
+{
+  nl <- pc[1]
+  gnd <- pc[2]
+  cn <- pc[3]
+
+  # Generate specified subplots
+  # Generate specified subplots
+  cross_plt <- as.logical(plt_list[1])
+  dtm_plt <- as.logical(plt_list[2])
+  n_norm_plt <- as.logical(plt_list[3])
+  norm_plt <- as.logical(plt_list[4])
+  rgb_plt <- as.logical(plt_list[5])
+
+  if (cross_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting cross section"))
+    plot_crossection(nl, colour_by = factor(Classification))
+  }
+  if (dtm_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting digital terrian model"))
+    dtm_plt <- (rasterize_terrain(gnd, res = 1, tin()))
+
+    ggsave(path = sd_path, "dtm_plot.png", dtm_plt)
+    # plot_dtm3d(dtm_plt, bg = "white", main = "Terrain Model")
+  }
+  if (n_norm_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting non-normalized point cloud (Heat map colouring)"))
+    plot(cn, bg = "white", main = "Non-normalized Point Cloud")
+  }
+  if (norm_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting normalized point cloud (Heat map colouring)"))
+    plot(nl, bg = "white", main = "Normalized Point Cloud")
+  }
+  if (rgb_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting point cloud (RGB colouring)"))
+    plot(nl, color = "RGB", bg = "white", size = 3, main = "RGB Point Cloud")
+  }
 }
 
 nn_list <- noise_norm(subset)
-
-nl <- nn_list[1]
-gnd <- nn_list[2]
-cn <- nn_list[3]
-
-# Generate specified subplots
-# Generate specified subplots
-cross_plt <- as.logical(plt_list[1])
-dtm_plt <- as.logical(plt_list[2])
-n_norm_plt <- as.logical(plt_list[3])
-norm_plt <- as.logical(plt_list[4])
-rgb_plt <- as.logical(plt_list[5])
-
-if (cross_plt == TRUE) {
-  message(green("\n[INFO] ", Sys.time(), "Plotting cross section"))
-  plot_crossection(nl, colour_by = factor(Classification))
-}
-if (dtm_plt == TRUE) {
-  message(green("\n[INFO] ", Sys.time(), "Plotting digital terrian model"))
-  plot_dtm3d((rasterize_terrain(gnd, res = 1, tin())), bg = "white", main = "Terrain Model")
-}
-if (n_norm_plt == TRUE) {
-  message(green("\n[INFO] ", Sys.time(), "Plotting non-normalized point cloud (Heat map colouring)"))
-  plot(cn, bg = "white", main = "Non-normalized Point Cloud")
-}
-if (norm_plt == TRUE) {
-  message(green("\n[INFO] ", Sys.time(), "Plotting normalized point cloud (Heat map colouring)"))
-  plot(nl, bg = "white", main = "Normalized Point Cloud")
-}
-if (rgb_plt == TRUE) {
-  message(green("\n[INFO] ", Sys.time(), "Plotting point cloud (RGB colouring)"))
-  plot(nl, color = "RGB", bg = "white", size = 3, main = "RGB Point Cloud")
-}
-
+gen_plots(nn_list, plt_list)
 
 #
 # # ===========================================================================================
