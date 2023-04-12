@@ -159,8 +159,16 @@ with open(filename, mode="r") as csvfile:
 
 forest_coverage_area = forest_coverage_area
 
-# Generate the bar graph for height class codes
-plt.hist(height_class_codes, bins=range(1, 10), align='left', rwidth=0.8)
+# Generate the histogram data
+hist_data, bin_edges, _ = plt.hist(height_class_codes, bins=range(1, 10), align='left', rwidth=0.8)
+
+# Add count labels on top of the bars
+for i in range(len(hist_data)):
+    count = hist_data[i]
+    x_position = bin_edges[i] # Centering the label on the bar
+    y_position = count + 0.2  # Slightly above the bar
+    plt.text(x_position, y_position, str(int(count)), ha='center', va='bottom')
+
 plt.xlabel("Height Class Code")
 plt.ylabel("Count")
 plt.title("Distribution of Height Class Codes")
@@ -185,7 +193,6 @@ plt.clf()
 buf_height.seek(0)
 height_distribution_image = base64.b64encode(buf_height.read()).decode("utf-8")
 buf_height.close()
-
 
 # Generate Area Distribution Plot
 plt.hist(areas, bins=20)
@@ -235,6 +242,7 @@ buf_height_area.close()
 sns.violinplot(data=file_data[['Z','convhull_area']])
 plt.title("Violin Plot of Tree Heights and Convex Hull Areas")
 plt.ylabel("Value")
+plt.xticks(ticks=[0, 1], labels=['Height', 'Convhull Area'])
 
 buf_violin = BytesIO()
 plt.savefig(buf_violin, format='png', dpi=300)
