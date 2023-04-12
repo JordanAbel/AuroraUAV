@@ -33,7 +33,12 @@ def get_height_class_code(height):
     else:
         return None
 
-# Andrei will add method
+# calculating tree health based on ExG index
+def get_tree_health(row):
+    r, g, b = float(row[3]), float(row[4]), float(row[5])
+    exg = 2 * g - r - b
+    threshold = 0.2 # Decided to put 0.2 based on https://www.researchgate.net/figure/Excess-green-ExG-histogram-for-vegetation-classification-with-the-Otsu-threshold-value_fig6_324234218
+    return 1 if exg > threshold else 0
 
 def generate_summary_paragraph(count, mean_height, mean_area):
     height_inference = ""
@@ -81,7 +86,7 @@ with open('sample.csv', 'r') as input_file, open('sample_output.csv', 'w', newli
     header.pop(-4)
     header.pop(-5)
     header.append('Height Class Code')
-    # Andrei will add a coolumn named Tree Health just how Height Class Code is added above
+    header.append('Tree Health')
     csv_writer.writerow(header[1:])
 
     # Process each row in the input file
@@ -124,7 +129,7 @@ with open('sample.csv', 'r') as input_file, open('sample_output.csv', 'w', newli
                 
         height = float(row[header.index('Z')])
         modified_row.append(get_height_class_code(height))
-        # Andrei will add the Tree health to the new row
+        modified_row.append(get_tree_health(modified_row))
 
         # Write the modified row to the output file
         csv_writer.writerow(modified_row)
