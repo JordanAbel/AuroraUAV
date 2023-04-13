@@ -62,8 +62,6 @@ pc_read_tile <- function(cat, t_size, t_buff) {
     t_dir <- loc
   }
 
-  print(t_dir)
-
   # Check if directory is empty to determine if tiling has been done. Perform tiling if it is.
   if(length(list.files(t_dir)) == 0) {
     message(green("\n[INFO] ", Sys.time(), " Tiling point cloud. This may take a while."))
@@ -75,7 +73,7 @@ pc_read_tile <- function(cat, t_size, t_buff) {
 
   # Read only the specified subset of tiles - for processing speeds & testing purposes
   t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
-  subset <- readLAS(t_files[8:10]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
+  subset <- readLAS(t_files[1]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
   # subset <- readLAS(t_files) # TODO: delete small subset line above to always do full file
 
   return(subset)
@@ -113,9 +111,12 @@ plot_crossection <- function(las,
 # Pre-processing function to denoise and normalize point cloud
 noise_norm <- function(l)
 {
-  f_name <- "/noise_norm"
-  nn_loc <- paste0(sd_path, f_name)
-  if(!file.exists(nn_loc)){
+  # Create directory to store tiles if it does not exist yet
+  loc <- paste0(sd_path, "/Plots")
+  if(!file.exists(loc)){
+    dir.create(loc)
+    nn_dir <- loc
+
     message(green("\n[INFO] ", Sys.time(), " noise_norm() - Processing", npoints(l), "points"))
     message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying & filtering noise points"))
     cn <- classify_noise(l, sor(19, 0.9))
@@ -133,13 +134,20 @@ noise_norm <- function(l)
 
     out <- list(nl, gnd, cn)
 
-    write.csv(out, nn_loc, row.names=FALSE)
+    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Saving Plots"))
+    writeLAS(nl, paste0(nn_dir, "/Normalized.las"), index = FALSE)
+    writeLAS(gnd, paste0(nn_dir, "/Ground_Classification.las"), index = FALSE)
+    writeLAS(cn, paste0(nn_dir, "/De-Noised.las"), index = FALSE)
 
     return(out) # output
   } else {
+    nn_dir <- loc
+    out <- list(readLAS(paste0(nn_dir, "/Normalized.las")),
+                readLAS(paste0(nn_dir, "/Ground_Classification.las")),
+                readLAS(paste0(nn_dir, "/De-Noised.las")))
+
     return(out) # output
   }
-
 }
 
 gen_plots <- function (pc, plt_list)

@@ -16,6 +16,7 @@ class MainWindow(tk.Frame):
 		self.grid()
 		self.create_gui()
 		self.r_thread = None
+		self.event = threading.Event()
 	
 	def create_gui(self):
 		
@@ -177,7 +178,7 @@ class MainWindow(tk.Frame):
 		self.pc_path.config(text=self.pc_p)
 	
 	def browse_sd(self):
-		self.sd_p = filedialog.askopenfilename()
+		self.sd_p = filedialog.askdirectory()
 		self.save_dir_path.config(text=self.sd_p)
 	
 	def toggle_textbox(self):
@@ -189,23 +190,16 @@ class MainWindow(tk.Frame):
 			self.textbox.grid()
 			self.toggle_button.config(text="Hide")
 	
-	def update_textbox(self, text):
-		self.textbox.insert(tk.END, text)
-	
 	def stop_r_thread(self):
-		if self.r_thread is not None:
-			self.r_thread.stop_flag.set()
-			self.run_button.config(state="normal")
-	
-	def r_stopped(self, text):
+		self.event.set()
 		self.run_button.config(state="normal")
-		self.textbox.insert(tk.END, text)
 	
 	def run_segmentation(self):
+		self.event.clear()
 		self.run_button.config(state="disabled")
 		self.textbox.delete("1.0", tk.END)
 		self.textbox.grid()
-		self.textbox.insert(tk.END, "Commencing Processing")
+		self.textbox.insert(tk.END, "Processing Starting\n")
 		self.toggle_button.config(text="Hide")
 		# Get the input values from the GUI
 		# Paths
@@ -250,57 +244,47 @@ class MainWindow(tk.Frame):
 			return
 		
 		else:
-			# Set the command line arguments for the R script
 			self.r_script = os.path.join(self.root_path, 'tree_segmentation_v2.R')
-			print(self.r_script)
-			# r_script = "tree_segmentation_v2.R"
 			
 			# Make the R script executable (equivalent to running "chmod +x r_script" in terminal)
 			os.chmod(self.r_script, 0o755)
 			
+			# Set the arguments to pass to the R script
 			cmd = ["Rscript", self.r_script]
 			args = [str(ortho_path), str(pc_path), str(sd_path), str(self.root_path),
 			        str(tile_size), str(tile_buffer), str(cross), str(dtm), str(n_normalized),
 			        str(normalized), str(rgb), str(canopy), str(segments), str(overlay)]
 			
-			# Create RThread and start it
-			self.r_thread = RThread(cmd, self.textbox, args=args, output_callback=self.r_stopped)
-			self.r_thread.start()
-
-
-class RThread(threading.Thread):
+			# Create and start R thread
+			r_thread = threading.Thread(target=self.run_script, args=(cmd, args, self.event))
+			r_thread.start()
 	
-	def __init__(self, cmd, text_box, args, output_callback):
-		threading.Thread.__init__(self)
-		self.cmd = cmd
-		self.text_box = text_box
-		self.args = args
-		self.stop_flag = threading.Event()
-		self.output_callback = output_callback
-	
-	def run(self):
-		cmd = self.cmd + self.args if self.args else self.cmd
+	def run_script(self, cmd, args, event):
+		cmd = cmd + args if args else cmd
 		try:
-			process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 			
 			while True:
-				output = process.stdout.readline() + process.stderr.readline()
+				output = process.stdout.readline()
 				if output == b'' and process.poll() is not None:
 					break
 				if output:
 					output = output.decode('utf-8')
+					
 					print(output)
-					self.text_box.insert(tk.END, output)
-					self.text_box.see(tk.END)
-				if self.stop_flag.is_set():
+					self.textbox.insert(tk.END, output)
+					self.textbox.see(tk.END)
+				if event.is_set():
 					process.terminate()
+					self.stop_r_thread()
 					break
+			
 			process.wait()
 			
-			# Notify the GUI that the R script has finished
-			self.output_callback("R process stopped")
-		# rc = process.poll()
-		# return rc
+			self.textbox.insert(tk.END, "Processing Terminated")
+			self.textbox.see(tk.END)
+			
+			self.run_button.config(state="normal")
 		
 		except subprocess.CalledProcessError as e:
 			print("Error:", e.output.decode())
