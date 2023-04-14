@@ -156,6 +156,8 @@ gen_plots <- function (pc, plt_list)
   gnd <- pc[2]
   cn <- pc[3]
 
+  print(nl)
+
   # Generate specified subplots
   # Generate specified subplots
   cross_plt <- as.logical(plt_list[1])
@@ -190,73 +192,74 @@ gen_plots <- function (pc, plt_list)
 }
 
 nn_list <- noise_norm(subset)
+
 gen_plots(nn_list, plt_list)
 
-#
-# # ===========================================================================================
-# # POINT CLOUD POST-PROCESSING
-# # ===========================================================================================
 
-# las <- nn_list[1]
-# c <- height.colors(25)
-# # Tune base_res. May change depending on subset
-# base_res <- (6 / density(nnsub))
-# base_res <- (6 / density(nnsub)) + 0.1
-#
-# # This function will create the window size based off of the tree height
-# variable_ws <- function(x) {
-#   y <- 2.6 * (-(exp(-0.08*(x-2)) - 1)) + 3
-#   y[x < 2] <- 3
-#   y[x > 20] <- 5
-#   return(y)
-# }
-#
-# # Pitfree with and subcircle tweak
-# chm_pitfree_05_2 <- rasterize_canopy(las, 0.5, pitfree(
-#   subcircle = 0.15,
-#   thresholds = c(0,5,10,15,20,25,30,35,40),
-#   max_edge = c(0, 2)
-# ), pkg = "terra")
-#
-# ttops_chm_pitfree_05_2 <- locate_trees(chm_pitfree_05_2, lmf(variable_ws))
-#
-# plot(chm_pitfree_05_2, main = "CHM PITFREE 2", col = c)
-# plot(sf::st_geometry(ttops_chm_pitfree_05_2), add = T, pch =3)
-#
-# algo <- dalponte2016(chm_pitfree_05_2, ttops_chm_pitfree_05_2)
-# las <- segment_trees(las, algo) # segment point cloud
-# # plot(las, bg = "white", color = "treeID") # visualize trees
-#
-# # Testing displaying ID's
-# # trees_clean <- subset(las, !is.na(las@data$treeID))
-# # plot(trees_clean, bg = "white", color = "treeID") # visualize trees
-# # text(trees_clean@data$X, trees_clean@data$Y, labels = trees_clean@data$treeID, cex = 0.8, pos = 1)
-#
-#
-# crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "concave")
-# q_val <- quantile(crowns$convhull_area, 0.12)
-# crowns <- crowns[crowns$convhull_area >= q_val,]
-# # plot(crowns["convhull_area"], main = "Crown area (concave hull)", col = viridis(10))
-#
-# # ======Crowns data frame manipulation and export for manual labelling======
-# #TODO: Remove all ct lines. work with oroginal crowns DF
-# ct <- crowns
-#
-# ct$species <- 0 # Add empty column to make manual work easier
-#
-# ct_export <- ct[, c("treeID", "species")] # Select only treeID and species columns
-# ct_export$geometry <- NULL # Delete geometry column (this was somehow staying included in previous line)
-#
-# write.csv(ct_export, file = "segment_list.csv", row.names = FALSE) # Write to .csv for manual identification
-#
-# # Import csv and add column to data frame after manual labelling is completed.
-# labelled <- read.csv("segment_list.csv")
-#
-# ct$species <- labelled$species[match(ct$treeID, labelled$treeID)]
-#
-# # Below are examples of how to manipulate data frame data in R
-# # ct$species[ct$treeID == 2100] <- 1 # updating species value of treeID 4
-# # ct$species[ct$treeID %in% c(3, 5, 7)] <- 3 # updating all rows with treeID 3, 5, 7 to 3
+# ===========================================================================================
+# POINT CLOUD POST-PROCESSING
+# ===========================================================================================
+
+las <- nn_list[1]
+c <- height.colors(25)
+# Tune base_res. May change depending on subset
+base_res <- (6 / density(nnsub))
+base_res <- (6 / density(nnsub)) + 0.1
+
+# This function will create the window size based off of the tree height
+variable_ws <- function(x) {
+  y <- 2.6 * (-(exp(-0.08*(x-2)) - 1)) + 3
+  y[x < 2] <- 3
+  y[x > 20] <- 5
+  return(y)
+}
+
+# Pitfree with and subcircle tweak
+chm_pitfree_05_2 <- rasterize_canopy(las, 0.5, pitfree(
+  subcircle = 0.15,
+  thresholds = c(0,5,10,15,20,25,30,35,40),
+  max_edge = c(0, 2)
+), pkg = "terra")
+
+ttops_chm_pitfree_05_2 <- locate_trees(chm_pitfree_05_2, lmf(variable_ws))
+
+plot(chm_pitfree_05_2, main = "CHM PITFREE 2", col = c)
+plot(sf::st_geometry(ttops_chm_pitfree_05_2), add = T, pch =3)
+
+algo <- dalponte2016(chm_pitfree_05_2, ttops_chm_pitfree_05_2)
+las <- segment_trees(las, algo) # segment point cloud
+# plot(las, bg = "white", color = "treeID") # visualize trees
+
+# Testing displaying ID's
+# trees_clean <- subset(las, !is.na(las@data$treeID))
+# plot(trees_clean, bg = "white", color = "treeID") # visualize trees
+# text(trees_clean@data$X, trees_clean@data$Y, labels = trees_clean@data$treeID, cex = 0.8, pos = 1)
+
+
+crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "concave")
+q_val <- quantile(crowns$convhull_area, 0.12)
+crowns <- crowns[crowns$convhull_area >= q_val,]
+# plot(crowns["convhull_area"], main = "Crown area (concave hull)", col = viridis(10))
+
+# ======Crowns data frame manipulation and export for manual labelling======
+#TODO: Remove all ct lines. work with oroginal crowns DF
+ct <- crowns
+
+ct$species <- 0 # Add empty column to make manual work easier
+
+ct_export <- ct[, c("treeID", "species")] # Select only treeID and species columns
+ct_export$geometry <- NULL # Delete geometry column (this was somehow staying included in previous line)
+
+write.csv(ct_export, file = "segment_list.csv", row.names = FALSE) # Write to .csv for manual identification
+
+# Import csv and add column to data frame after manual labelling is completed.
+labelled <- read.csv("segment_list.csv")
+
+ct$species <- labelled$species[match(ct$treeID, labelled$treeID)]
+
+# Below are examples of how to manipulate data frame data in R
+# ct$species[ct$treeID == 2100] <- 1 # updating species value of treeID 4
+# ct$species[ct$treeID %in% c(3, 5, 7)] <- 3 # updating all rows with treeID 3, 5, 7 to 3
 #
 # # ========================================================
 #

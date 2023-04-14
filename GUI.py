@@ -1,11 +1,11 @@
-import queue
-import time
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog
 from tkinter.font import Font
 from PIL import ImageTk, Image
-import subprocess, os, threading, sys
+import subprocess, os, sys
+from threading import Thread, Event
 
+bg_col = '#1c1c1c'
 
 class MainWindow(tk.Frame):
 	root_path = getattr(sys, '_MEIPASS', os.getcwd())
@@ -16,7 +16,7 @@ class MainWindow(tk.Frame):
 		self.grid()
 		self.create_gui()
 		self.r_thread = None
-		self.event = threading.Event()
+		self.event = Event()
 	
 	def create_gui(self):
 		
@@ -36,127 +36,127 @@ class MainWindow(tk.Frame):
 		self.master.geometry("{}x{}".format(self.image.size[0], self.image.size[1]))
 		
 		# create containers for individual rows
-		title_container = tk.Frame(root, bg="")
-		ver_container = tk.Frame(root, bg="")
-		browse_container = tk.Frame(root, bg="")
-		tog_container = tk.Frame(root, bg="")
-		in_container = tk.Frame(root, bg="")
-		btn_container = tk.Frame(root, bg="")
-		text_container = tk.Frame(root, bg="")
+		title_container = tk.Frame(root, bg=bg_col)
+		ver_container = tk.Frame(root, bg=bg_col)
+		browse_container = tk.Frame(root, bg=bg_col)
+		tog_container = tk.Frame(root, bg=bg_col)
+		in_container = tk.Frame(root, bg=bg_col)
+		btn_container = tk.Frame(root, bg=bg_col)
+		text_container = tk.Frame(root, bg=bg_col)
 		
 		# create title and version number
-		self.title = tk.Label(title_container, text="Forest Metrics Software", font=title_font)
+		self.title = tk.Label(title_container, text="Forest Metrics Software", font=title_font, bg=bg_col)
 		self.title.grid(row=0, column=0, sticky="nsew")
-		self.ver = tk.Label(ver_container, text="v 2.1.0")
+		self.ver = tk.Label(ver_container, text="v 2.1.0", bg=bg_col)
 		self.ver.grid(row=0, column=0)
 		
 		# create file browsers
-		self.ortho_label = tk.Label(browse_container, text="Orthomosaic:")
-		self.ortho_path = tk.Label(browse_container, text=o_path)  # TODO: delete and uncomment below line
-		# self.ortho_path = tk.Label(browse_container, text="No Orthomosaic (.TIF) selected", bg="systemTransparent")
-		self.ortho_button = tk.Button(browse_container, text="Browse", command=self.browse_ortho)
+		self.ortho_label = tk.Label(browse_container, text="Orthomosaic:", bg=bg_col)
+		self.ortho_path = tk.Label(browse_container, text=o_path, bg=bg_col)  # TODO: delete and uncomment below line
+		# self.ortho_path = tk.Label(browse_container, text="No Orthomosaic (.TIF) selected", bg=bg_col)
+		self.ortho_button = tk.Button(browse_container, text="Browse", command=self.browse_ortho, bg=bg_col)
 		self.ortho_label.grid(row=0, column=0, sticky="nsew")
 		self.ortho_path.grid(row=0, column=1, sticky="nsew")
 		self.ortho_button.grid(row=0, column=2, sticky="nsew")
 		
-		self.pc_label = tk.Label(browse_container, text="Point Cloud:")
-		self.pc_path = tk.Label(browse_container, text=pc_path)  # TODO: Delete and uncomment below line
-		# self.pc_path = tk.Label(browse_container, text="No Point Cloud (.LAS) selected", bg="systemTransparent")
-		self.pc_button = tk.Button(browse_container, text="Browse", command=self.browse_pc)
+		self.pc_label = tk.Label(browse_container, text="Point Cloud:", bg=bg_col)
+		self.pc_path = tk.Label(browse_container, text=pc_path, bg=bg_col)  # TODO: Delete and uncomment below line
+		# self.pc_path = tk.Label(browse_container, text="No Point Cloud (.LAS) selected", bg=bg_col)
+		self.pc_button = tk.Button(browse_container, text="Browse", command=self.browse_pc, bg=bg_col)
 		self.pc_label.grid(row=1, column=0, sticky="nsew")
 		self.pc_path.grid(row=1, column=1, sticky="nsew")
 		self.pc_button.grid(row=1, column=2, sticky="nsew")
 		
-		self.save_dir_label = tk.Label(browse_container, text="Output Directory:")
-		self.save_dir_path = tk.Label(browse_container, text=save_dir_path)  # TODO: delete and uncomment below line
-		# self.save_dir_path = tk.Label(browse_container, text="No output directory selected", bg="systemTransparent")
-		self.save_dir_button = tk.Button(browse_container, text="Browse", command=self.browse_sd)
+		self.save_dir_label = tk.Label(browse_container, text="Output Directory:", bg=bg_col)
+		self.save_dir_path = tk.Label(browse_container, text=save_dir_path, bg=bg_col)  # TODO: delete and uncomment below line
+		# self.save_dir_path = tk.Label(browse_container, text="No output directory selected", bg=bg_col)
+		self.save_dir_button = tk.Button(browse_container, text="Browse", command=self.browse_sd, bg=bg_col)
 		self.save_dir_label.grid(row=2, column=0, sticky="nsew")
 		self.save_dir_path.grid(row=2, column=1, sticky="nsew")
 		self.save_dir_button.grid(row=2, column=2, sticky="nsew")
 		
 		# create plot toggles
-		self.toggle_label = tk.Label(tog_container, text="Output Plots:")
+		self.toggle_label = tk.Label(tog_container, text="Output Plots:", bg=bg_col)
 		self.toggle_label.grid(row=1, column=0, columnspan=8, sticky="nsew")
 		
 		# 2D Cross section
 		self.cross_var = tk.BooleanVar(value=False)
-		self.cross_button = tk.Checkbutton(tog_container, text="Cross", variable=self.cross_var)
+		self.cross_button = tk.Checkbutton(tog_container, text="Cross", variable=self.cross_var, bg=bg_col)
 		self.cross_button.grid(row=2, column=0)
 		Tooltip(self.cross_button, "2D plot of cross-section of terrain")
 		
 		# 3d Digital terrain model
 		self.dtm_var = tk.BooleanVar(value=False)
-		self.dtm_button = tk.Checkbutton(tog_container, text="DTM", variable=self.dtm_var)
+		self.dtm_button = tk.Checkbutton(tog_container, text="DTM", variable=self.dtm_var, bg=bg_col)
 		self.dtm_button.grid(row=2, column=1)
 		Tooltip(self.dtm_button, "3D plot of digital terrain model")
 		
 		# 3D Normalized (flat ground) point cloud. Heat Map colouring
 		self.n_normalized_var = tk.BooleanVar(value=False)
-		self.n_normalized_button = tk.Checkbutton(tog_container, text="Non-norm", variable=self.n_normalized_var)
+		self.n_normalized_button = tk.Checkbutton(tog_container, text="Non-norm", variable=self.n_normalized_var, bg=bg_col)
 		self.n_normalized_button.grid(row=2, column=2)
 		Tooltip(self.n_normalized_button, "3D plot of non-normalized \n"
 		                                  "(non-flattened) point cloud in heat map colouring")
 		
 		# 3D Normalized (flat ground) point cloud. Heat Map colouring
 		self.normalized_var = tk.BooleanVar(value=False)
-		self.normalized_button = tk.Checkbutton(tog_container, text="Norm", variable=self.normalized_var)
+		self.normalized_button = tk.Checkbutton(tog_container, text="Norm", variable=self.normalized_var, bg=bg_col)
 		self.normalized_button.grid(row=2, column=3)
 		Tooltip(self.normalized_button, "3D plot of normalized (flattened) point cloud in heat map colouring")
 		
 		# 3D rgb point cloud
 		self.rgb_var = tk.BooleanVar(value=False)
-		self.rgb_button = tk.Checkbutton(tog_container, text="RGB", variable=self.rgb_var)
+		self.rgb_button = tk.Checkbutton(tog_container, text="RGB", variable=self.rgb_var, bg=bg_col)
 		self.rgb_button.grid(row=2, column=4)
 		Tooltip(self.rgb_button, "3D plot of normalized (flattened) point cloud in RGB colouring")
 		
 		# 2D located trees
 		self.canopy_var = tk.BooleanVar(value=False)
-		self.canopy_button = tk.Checkbutton(tog_container, text="Canopy", variable=self.canopy_var)
+		self.canopy_button = tk.Checkbutton(tog_container, text="Canopy", variable=self.canopy_var, bg=bg_col)
 		self.canopy_button.grid(row=2, column=5)
 		Tooltip(self.canopy_button, "2D plot of overhead view of tree canopy with crown markers")
 		
 		# 3D segments
 		self.segments_var = tk.BooleanVar(value=False)
-		self.segments_button = tk.Checkbutton(tog_container, text="Segments", variable=self.segments_var)
+		self.segments_button = tk.Checkbutton(tog_container, text="Segments", variable=self.segments_var, bg=bg_col)
 		self.segments_button.grid(row=2, column=6)
 		Tooltip(self.segments_button, "3D plot of automatically generated tree segments")
 		
 		# 2D segments - rgb overlay
 		self.overlay_var = tk.BooleanVar(value=False)
-		self.overlay_button = tk.Checkbutton(tog_container, text="Overlay", variable=self.overlay_var)
+		self.overlay_button = tk.Checkbutton(tog_container, text="Overlay", variable=self.overlay_var, bg=bg_col)
 		self.overlay_button.grid(row=2, column=7)
 		Tooltip(self.overlay_button, "2D plot of tree segments overlayed on orthomosaic map")
 		
 		# create inputs
-		self.toggle_label = tk.Label(in_container, text="Point Cloud Tile Params:")
+		self.toggle_label = tk.Label(in_container, text="Point Cloud Tile Params:", bg=bg_col)
 		self.toggle_label.grid(row=0, column=0, columnspan=2, sticky="nsew")
 		
 		self.tile_input_var = tk.StringVar(value="250")
-		self.tile_size_label = tk.Label(in_container, text="Tile Size (m):")
+		self.tile_size_label = tk.Label(in_container, text="Tile Size (m):", bg=bg_col)
 		self.tile_size_label.grid(row=3, column=0)
-		self.tile_size_entry = tk.Entry(in_container, textvariable=self.tile_input_var)
+		self.tile_size_entry = tk.Entry(in_container, textvariable=self.tile_input_var, bg=bg_col)
 		self.tile_size_entry.grid(row=3, column=1)
 		
 		self.buff_input_var = tk.StringVar(value="0")
-		self.tile_buffer_label = tk.Label(in_container, text="Tile Buffer (m):")
+		self.tile_buffer_label = tk.Label(in_container, text="Tile Buffer (m):", bg=bg_col)
 		self.tile_buffer_label.grid(row=4, column=0)
-		self.tile_buffer_entry = tk.Entry(in_container, textvariable=self.buff_input_var)
+		self.tile_buffer_entry = tk.Entry(in_container, textvariable=self.buff_input_var, bg=bg_col)
 		self.tile_buffer_entry.grid(row=4, column=1)
 		
 		# create options for tables
 		# TODO: options for outputting 2 column table for manual labelling, etc
 		
 		# create run/ stop button
-		self.run_button = tk.Button(btn_container, text="Run", command=self.run_segmentation)
+		self.run_button = tk.Button(btn_container, text="Run", command=self.run_segmentation, bg=bg_col)
 		self.run_button.grid(row=0, column=1)
-		self.stop_button = tk.Button(btn_container, text="Stop", command=self.stop_r_thread)
+		self.stop_button = tk.Button(btn_container, text="Stop", command=self.stop_r_thread, bg=bg_col)
 		self.stop_button.grid(row=0, column=2)
 		
 		# create output text box
-		self.toggle_button = tk.Button(text_container, text="Show Output", command=self.toggle_textbox)
+		self.toggle_button = tk.Button(text_container, text="Show Output", command=self.toggle_textbox, bg=bg_col)
 		self.toggle_button.grid(row=0, column=0)
-		self.textbox = tk.Text(text_container, height=10)
+		self.textbox = tk.Text(text_container, height=10, bg=bg_col)
 		self.textbox.grid(row=1, column=0)
 		
 		# place containers on GUI
@@ -256,7 +256,7 @@ class MainWindow(tk.Frame):
 			        str(normalized), str(rgb), str(canopy), str(segments), str(overlay)]
 			
 			# Create and start R thread
-			r_thread = threading.Thread(target=self.run_script, args=(cmd, args, self.event))
+			r_thread = Thread(target=self.run_script, args=(cmd, args, self.event))
 			r_thread.start()
 	
 	def run_script(self, cmd, args, event):
@@ -283,7 +283,6 @@ class MainWindow(tk.Frame):
 			
 			self.textbox.insert(tk.END, "Processing Terminated")
 			self.textbox.see(tk.END)
-			
 			self.run_button.config(state="normal")
 		
 		except subprocess.CalledProcessError as e:
@@ -305,7 +304,7 @@ class Tooltip:
 		self.tw = tk.Toplevel(self.widget)
 		self.tw.wm_overrideredirect(True)
 		self.tw.wm_geometry("+%d+%d" % (x, y))
-		label = tk.Label(self.tw, text=self.text, justify="left", relief="solid", borderwidth=1)
+		label = tk.Label(self.tw, text=self.text, justify="left", relief="solid", borderwidth=1, bg=bg_col)
 		label.pack(ipadx=1)
 	
 	def hide(self, event=None):
