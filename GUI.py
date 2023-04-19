@@ -27,7 +27,7 @@ class MainWindow(tk.Frame):
 		title_font = Font(family="Helvetica", size=26, weight="bold")
 		
 		# add image background
-		self.image_path = os.path.join(self.root_path, 'forest_bg1.png')
+		self.image_path = "C:/Users/spart/Documents/AuroraUAV/forest_bg copy.png"
 		self.image = Image.open(self.image_path)
 		self.background_image = ImageTk.PhotoImage(self.image)
 		self.background_label = tk.Label(self.master, image=self.background_image)
@@ -177,7 +177,7 @@ class MainWindow(tk.Frame):
 		self.pc_path.config(text=self.pc_p)
 	
 	def browse_sd(self):
-		self.sd_p = filedialog.askopenfilename()
+		self.sd_p = filedialog.askdirectory()
 		self.save_dir_path.config(text=self.sd_p)
 	
 	def toggle_textbox(self):
@@ -252,7 +252,6 @@ class MainWindow(tk.Frame):
 		else:
 			# Set the command line arguments for the R script
 			self.r_script = os.path.join(self.root_path, 'tree_segmentation_v2.R')
-			print(self.r_script)
 			# r_script = "tree_segmentation_v2.R"
 			
 			# Make the R script executable (equivalent to running "chmod +x r_script" in terminal)
@@ -264,46 +263,25 @@ class MainWindow(tk.Frame):
 			        str(normalized), str(rgb), str(canopy), str(segments), str(overlay)]
 			
 			# Create RThread and start it
-			self.r_thread = RThread(cmd, self.textbox, args=args, output_callback=self.r_stopped)
-			self.r_thread.start()
+			print(self.r_script)
+			r_thread = RThread(self.r_script, args)
+			r_thread.start()
 
 
 class RThread(threading.Thread):
-	
-	def __init__(self, cmd, text_box, args, output_callback):
-		threading.Thread.__init__(self)
-		self.cmd = cmd
-		self.text_box = text_box
-		self.args = args
-		self.stop_flag = threading.Event()
-		self.output_callback = output_callback
-	
-	def run(self):
-		cmd = self.cmd + self.args if self.args else self.cmd
-		try:
-			process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			
-			while True:
-				output = process.stdout.readline() + process.stderr.readline()
-				if output == b'' and process.poll() is not None:
-					break
-				if output:
-					output = output.decode('utf-8')
-					print(output)
-					self.text_box.insert(tk.END, output)
-					self.text_box.see(tk.END)
-				if self.stop_flag.is_set():
-					process.terminate()
-					break
-			process.wait()
-			
-			# Notify the GUI that the R script has finished
-			self.output_callback("R process stopped")
-		# rc = process.poll()
-		# return rc
-		
-		except subprocess.CalledProcessError as e:
-			print("Error:", e.output.decode())
+    def __init__(self, r_script, args):
+        threading.Thread.__init__(self)
+        self.r_script = r_script
+        self.args = args
+
+    def run(self):
+        process = subprocess.Popen(["Rscript", self.r_script] + self.args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = process.communicate()
+        if err:
+            print("Error: ", err)
+        else:
+            print("Output: ", out)
+
 
 
 class Tooltip:

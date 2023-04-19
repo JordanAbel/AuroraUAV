@@ -3,7 +3,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 # Automatically install and load required packages into R session
 cwd <- args[4] # Obtain execution directory from GUI
-pkg_file <- paste0(cwd, "/R_requirements.txt")
+pkg_file <- paste0(cwd, "\\R_requirements.txt")
 pkg_list <- readLines(pkg_file)
 
 # Check for the existence of each package and install if necessary
@@ -110,79 +110,138 @@ plot_crossection <- function(las,
   return(p)
 }
 
+
+
+# Pre-processing function to denoise and normalize point cloud
 # Pre-processing function to denoise and normalize point cloud
 noise_norm <- function(l)
 {
   f_name <- "/noise_norm"
   nn_loc <- paste0(sd_path, f_name)
-  if(!file.exists(nn_loc)){
-    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Processing", npoints(l), "points"))
-    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying & filtering noise points"))
-    cn <- classify_noise(l, sor(19, 0.9))
-    cn <- filter_poi(cn, Classification != LASNOISE) # drop noise points
-    diff <- npoints(l) - npoints(cn)
-    per <- round((diff / npoints(l)) * 100, 2)
-    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Removed", diff, "noise points (", per, "% )"))
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Processing", npoints(l), "points"))
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying & filtering noise points"))
+  cn <- classify_noise(l, sor(19, 0.9))
+  cn <- filter_poi(cn, Classification != LASNOISE) # drop noise points
+  diff <- npoints(l) - npoints(cn)
+  per <- round((diff / npoints(l)) * 100, 2)
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Removed", diff, "noise points (", per, "% )"))
 
-    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying ground points"))
-    gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Classifying ground points"))
+  gnd <- classify_ground(cn, csf(sloop_smooth = TRUE, class_threshold = 1, time_step = 0.65))
 
-    message(green("\n[INFO] ", Sys.time(), " noise_norm() - Normalizing height"))
-    nl <- normalize_height(gnd, knnidw()) # normalize
-    nl <- filter_poi(nl, Z >= 0) # drop points below zero
-
-    out <- list(nl, gnd, cn)
-
-    write.csv(out, nn_loc, row.names=FALSE)
-
-    return(out) # output
-  } else {
-    return(out) # output
+  if (npoints(filter_poi(gnd, Classification == LASGROUND)) == 0) {
+    stop("No ground points found after classification. Please check the input LAS file or adjust the classification parameters.")
   }
 
+  message(green("\n[INFO] ", Sys.time(), " noise_norm() - Normalizing height"))
+  nl <- normalize_height(gnd, knnidw()) # normalize
+  nl <- filter_poi(nl, Z >= 0) # drop points below zero
+  out <- list(nl, gnd, cn)
+
+    # Convert LAS objects to data.frames
+  out_df <- lapply(out, function(x) as.data.frame(lidR::as.spatial(x)))
+
+    # Write each data.frame to a separate CSV file
+  file_names <- c("normalized_points", "ground_points", "filtered_points")
+  for (i in 1:length(out_df)) {
+    write.csv(out_df[[i]], paste0(nn_loc, "_", file_names[i], ".csv"), row.names = FALSE)
+  }
+  return(out) # output
 }
+
 
 gen_plots <- function (pc, plt_list)
 {
-  nl <- pc[1]
-  gnd <- pc[2]
-  cn <- pc[3]
+  nl <- pc[[1]]
+  gnd <- pc[[2]]
+  cn <- pc[[3]]
 
-  # Generate specified subplots
   # Generate specified subplots
   cross_plt <- as.logical(plt_list[1])
   dtm_plt <- as.logical(plt_list[2])
   n_norm_plt <- as.logical(plt_list[3])
   norm_plt <- as.logical(plt_list[4])
   rgb_plt <- as.logical(plt_list[5])
+  canopy_plt <- as.logical(plt_list[6])
+  seg_plt <- as.logical(plt_list[7])
+  overlay_plt <- as.logical(plt_list[8])
 
-  if (cross_plt == TRUE) {
-    message(green("\n[INFO] ", Sys.time(), "Plotting cross section"))
-    plot_crossection(nl, colour_by = factor(Classification))
-  }
-  if (dtm_plt == TRUE) {
-    message(green("\n[INFO] ", Sys.time(), "Plotting digital terrian model"))
-    dtm_plt <- (rasterize_terrain(gnd, res = 1, tin()))
 
-    ggsave(path = sd_path, "dtm_plot.png", dtm_plt)
-    # plot_dtm3d(dtm_plt, bg = "white", main = "Terrain Model")
-  }
   if (n_norm_plt == TRUE) {
     message(green("\n[INFO] ", Sys.time(), "Plotting non-normalized point cloud (Heat map colouring)"))
-    plot(cn, bg = "white", main = "Non-normalized Point Cloud")
+    non_norm_plot <- plot(cn, bg = "white", main = "Non-normalized Point Cloud")
+    # ggsave(file.path(sd_path, "non_normalized_plot.png"), non_norm_plot)
   }
   if (norm_plt == TRUE) {
     message(green("\n[INFO] ", Sys.time(), "Plotting normalized point cloud (Heat map colouring)"))
-    plot(nl, bg = "white", main = "Normalized Point Cloud")
+    norm_plot <- plot(nl, bg = "white", main = "Normalized Point Cloud")
+    # ggsave(file.path(sd_path, "normalized_plot.png"), norm_plot)
   }
+
+  if (cross_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting cross section"))
+    p <- plot_crossection(nl, colour_by = factor(Classification))
+    ggsave(path = sd_path, "cross.png", p)
+  }
+
   if (rgb_plt == TRUE) {
     message(green("\n[INFO] ", Sys.time(), "Plotting point cloud (RGB colouring)"))
-    plot(nl, color = "RGB", bg = "white", size = 3, main = "RGB Point Cloud")
+    rgb_plot <-  plot(nl, color = "RGB", bg = "white", size = 3, main = "RGB Point Cloud")
+    # ggsave(path = sd_path, "rgb_plot.png", rgb_plot)
+  }
+
+  if (canopy_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting canopy height model"))
+
+    bbox <- extent(nl)
+    nl_cropped <- filter_poi(nl, bbox)
+
+    chm <- grid_canopy(nl_cropped, res = 1, p2r())
+    chm_plt <- plot(chm, col = height.colors(50))
+
+    png(file.path(sd_path, "canopy_plot.png"))
+    plot(chm_plt)
+    dev.off()
+  }
+
+
+
+   if (dtm_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting digital terrian model"))
+    # dtm_plt <- (rasterize_terrain(gnd, res = 1, tin()))
+    plot(rasterize_terrain(gnd, res = 1, tin()))
+    # ggsave(filename = file.path(sd_path, "dtm_plot.png"), plot = dtm_plt)
+    # plot_dtm3d(dtm_plt, bg = "white", main = "Terrain Model")
+  }
+
+  if (seg_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting tree segmentation"))
+    seg <- tree_detection(nl, lmf(3), uc(0.3, 0.2))
+    sp <- plot(nl, color = "Z", colorPalette = height.colors(50))
+    seg_plt <- add_segments(sp, seg)
+    png(file.path(sd_path, "segmentation_plot.png"))
+    plot(seg_plt)
+    dev.off()
+  }
+
+  if (overlay_plt == TRUE) {
+    message(green("\n[INFO] ", Sys.time(), "Plotting RGB overlay on point cloud"))
+    overlay <- plot_3d(nl, color = "RGB", backend = "rgl", trim = 50)
+    overlay_plt <- overlay %>%
+      add_axes() %>%
+      view_controls()
+    # Save overlay plot as a screenshot
+    rgl::rgl.snapshot(file.path(sd_path, "overlay_plot.png"), fmt = "png")
+    # Close the RGL window after saving the plot
+    rgl::rgl.close()
   }
 }
 
 nn_list <- noise_norm(subset)
 gen_plots(nn_list, plt_list)
+
+
+
 
 #
 # # ===========================================================================================
