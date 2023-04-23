@@ -8,6 +8,7 @@ library(crayon)
 library(sp)
 library(rayshader)
 library(viridis)
+library(cli)
 
 # library(BiocManager)
 # library(lidR.li2012enhancement)
@@ -24,14 +25,14 @@ Sys.getenv("R_MAX_VSIZE") # verify that change has taken effect
 message(green("\n[INFO] ", Sys.time(), " Reading .LAS files"))
 
 # TODO: Update paths for local machine
-lasC <- readLAScatalog("C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/points.las") # Full ortho .las point cloud
-ortho <- terra::rast("C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/rgb_map.tif") # Full RGB ortho map
-t_dir <- "C:/Users/Jorda/OneDrive/Documents/University/Comp 3710/AuroraUAV/RGB Data/Tiles" # directory to store tiles after tiling step
+lasC <- readLAScatalog("/AuroraUAV/RGB Data/points.las") # Full ortho .las point cloud
+ortho <- terra::rast("/AuroraUAV/RGB Data/rgb_map.tif") # Full RGB ortho map
+t_dir <- "/AuroraUAV/RGB Data/Tiles" # directory to store tiles after tiling step
 
 opt_output_files(lasC) <- paste0(t_dir, "/{XLEFT}_{YBOTTOM}_{ID}") # label outputs based on coordinates
 opt_chunk_size(lasC) <- 250 # square tile size in meters
 opt_chunk_buffer(lasC) <- 0
-# tiles <- catalog_retile(lasC) # Tile full ortho point cloud. **COMMENT OUT AFTER 1 SUCCESSFUL RUN**
+tiles <- catalog_retile(lasC) # Tile full ortho point cloud. **COMMENT OUT AFTER 1 SUCCESSFUL RUN**
 tiles <- readLAScatalog(t_dir) # Read tile folder
 
 # plot(tiles, chunk = TRUE)
@@ -39,8 +40,8 @@ tiles <- readLAScatalog(t_dir) # Read tile folder
 
 # Read only the specified subset of tiles - for processing speeds & testing purposes
 t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
-subset <- readLAS(t_files[14:16]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
-# subset <- readLAS(t_files)
+# subset <- readLAS(t_files[13:15]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
+subset <- readLAS(t_files)
 
 # Check subset tiles. Will indicate if there are any invalidities.
 message(green("\n[INFO] ", Sys.time(), " Checking point cloud"))
@@ -134,11 +135,10 @@ chm_pitfree_05_2 <- rasterize_canopy(las, 0.5, pitfree(
 
 ttops_chm_pitfree_05_2 <- locate_trees(chm_pitfree_05_2, lmf(variable_ws))
 
-plot(chm_pitfree_05_2, main = "CHM PITFREE 2", col = col); plot(sf::st_geometry(ttops_chm_pitfree_05_2), add = T, pch =3)
-
 algo <- dalponte2016(chm_pitfree_05_2, ttops_chm_pitfree_05_2)
 las <- segment_trees(las, algo) # segment point cloud
-plot(las, bg = "white", color = "treeID") # visualize trees
+# plot(las, bg = "white", color = "treeID") # visualize trees
+
 
 crowns <- crown_metrics(las, func = .stdtreemetrics, geom = "concave")
 # TODO: Modify to drop segments of either too little points or small area
@@ -146,26 +146,35 @@ q_val <- quantile(crowns$convhull_area, 0.12)
 crowns <- crowns[crowns$convhull_area >= q_val,]
 plot(crowns["convhull_area"], main = "Crown area (concave hull)", col = viridis(10))
 
+j <- (length(crowns$treeID))
+
+cli_progress_bar("Adding RGB data to crown metrics", total = length(crowns$treeID))
+for (x in 1:length(crowns$treeID)) {
+  tree <- filter_poi(las, treeID==crowns$treeID[x])
+
+  r <- tree$R
+  g <- tree$G
+  b <- tree$B
+
+  crowns$R[x] <- toString(r)
+  crowns$G[x] <- toString(g)
+  crowns$B[x] <- toString(b)
+
+  cli_progress_update()
+}
+cli_progress_done()
+
+write.csv(crowns, "crown_metrics.csv")
+
 # =======attempting to transfer tree segments to rgb orthomosaic=======
 trees_sp <- as_Spatial(crowns)
 trees_sp <- spTransform(trees_sp, crs(ortho))
 # trees_sf <- st_as_sf(trees_sp)
 ortho_rgb_cropped <- crop(ortho, extent(trees_sp), res = NULL)
 # trees_raster <- rasterize(trees_sf, ortho_rgb_cropped)
+x11(width = 50000, height = 40000)
+layout(matrix(c(1), 1, 1, byrow = TRUE))
 
 plotRGB(ortho_rgb_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
 # plotRGB(ortho, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
 plot(trees_sp, add = TRUE, border = "red", lwd = 1)
-
-
-
-# ===================================================================
-metrics <- crown_metrics(las, ~list(z_max = max(Z), z_mean = mean(Z))) # calculate tree metrics
-head(metrics)
-
-# plot(metrics["z_max"], pal = hcl.colors, pch = 19) # plot using z_max
-
-plot(metrics["z_max"], pal = hcl.colors)
-
-tree110 <- filter_poi(las, treeID == 282)
-plot(tree110, bg = "white")
