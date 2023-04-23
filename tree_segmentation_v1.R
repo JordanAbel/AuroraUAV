@@ -1,16 +1,12 @@
-# ***** THESE VARIABLES MUST BE UPDATED FOR EVERY NEW DATA SET *****
+# ***** UPDATE THESE VARIABLES FOR EVERY NEW DATA SET *****
 # ===============================================================================================
 # Copy file paths to corresponding full orthomosaic map and point cloud .LAS files
-# ortho_path <- "path_to_orthomosaic_map_file.tif"
-# las_path <- "path_to_point_cloud_file.las"
+ortho_path <- "path_to_orthomosaic_map_file.tif"
+las_path <- "path_to_point_cloud_file.las"
 t_size <- 250 # Point cloud tile size in square meters. Greater than 250.
 t_buffer <- 0 # Buffer size around each tile in meters.
 all_plots <- FALSE # Output all subplots from point cloud (ground model, canopy, etc) TRUE or FALSE
-
-ortho_path <- "/Users/Shea/Desktop/COMP 4910/RGB Data/rgb_map.tif"
-las_path <- "/Users/Shea/Desktop/COMP 4910/RGB Data/points.las"
 # ===============================================================================================
-
 
 # Automatically install and load required packages into R session
 pkg_file <- "R_requirements.txt"
@@ -57,8 +53,8 @@ pc_read_tile <- function(cat, t_size, t_buff) {
 
   # Read only the specified subset of tiles - for processing speeds & testing purposes
   t_files <- list.files(t_dir, pattern = ".las$", full.names = TRUE)
-  subset <- readLAS(t_files[8:10]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
-  # subset <- readLAS(t_files) # TODO: delete small subset line above to always do full file
+  # subset <- readLAS(t_files[8:10]) # t_files[n:m] = file position in order. Delete “[n:m]” to read entire catalog.
+  subset <- readLAS(t_files)
 
   return(subset)
 }
