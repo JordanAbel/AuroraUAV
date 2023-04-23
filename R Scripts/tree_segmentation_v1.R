@@ -1,22 +1,17 @@
-# Required Packages
-library(lidR)
-library(sf)
-library(ggplot2)
-library(terra) # instead of raster
-library(viridis)
-library(crayon)
-library(sp)
-library(rayshader)
-library(viridis)
-library(cli)
+# Automatically install and load required packages into R session
+pkg_list <- readLines("/R_requirements.txt")
 
-# library(BiocManager)
-# library(lidR.li2012enhancement)
-
-# # Install custom package
-# install.packages("BiocManager")
-# BiocManager::install("EBImage")
-# devtools::install_github("mcoghill/lidR.li2012enhancement")
+# Check for the existence of each package and install if necessary
+cran_mirror <- "https://cran.r-project.org" # Set the CRAN mirror to use for package installations
+for (pkg_name in pkg_list) {
+  if (!require(pkg_name, character.only = TRUE)) {
+    install.packages(pkg_name, repos = cran_mirror)
+    if (!require(pkg_name, character.only = TRUE)) {
+      stop("Failed to install package: ", pkg_name)
+    }
+  }
+  library(pkg_name, character.only = TRUE)
+}
 
 # Increase virtual memory limit of R environment
 Sys.setenv(R_MAX_VSIZE = "100Gb")
