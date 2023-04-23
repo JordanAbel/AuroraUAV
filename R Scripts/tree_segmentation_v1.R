@@ -35,11 +35,11 @@ ortho <- terra::rast(ortho_path) # Full RGB ortho map
 # Function to read point cloud file and perform tiling.
 pc_read_tile <- function(cat, t_size, t_buff) {
   # Create directory to store tiles if it does not exist yet
-  if(!file.exists("Tiles")){
-    dir.create("Tiles")
-    t_dir <- "Tiles"
+  if(!file.exists("../Tiles")){
+    dir.create("../Tiles")
+    t_dir <- "../Tiles"
   } else {
-    t_dir <- "Tiles"
+    t_dir <- "../Tiles"
   }
 
   # Check if directory is empty to determine if tiling has been done. Perform tiling if it is.
@@ -180,10 +180,10 @@ ct$species <- 0 # Add empty column to make manual work easier
 ct_export <- ct[, c("treeID", "species")] # Select only treeID and species columns
 ct_export$geometry <- NULL # Delete geometry column (this was somehow staying included in previous line)
 
-write.csv(ct_export, file = "segment_list.csv", row.names = FALSE) # Write to .csv for manual identification
+write.csv(ct_export, file = "../segment_list.csv", row.names = FALSE) # Write to .csv for manual identification
 
 # Import csv and add column to data frame after manual labelling is completed.
-labelled <- read.csv("segment_list.csv")
+labelled <- read.csv("../segment_list.csv")
 
 ct$species <- labelled$species[match(ct$treeID, labelled$treeID)]
 
@@ -197,7 +197,7 @@ ct$species <- labelled$species[match(ct$treeID, labelled$treeID)]
 trees_sp <- spTransform(as_Spatial(crowns), crs(ortho))
 ortho_cropped <- crop(ortho, extent(subset))
 
-png(filename= "cropped_overlay.png", width = 29812, height = 33605, res = 300, units = "px") # initialize png output for plot
+png(filename= "../cropped_overlay.png", width = 29812, height = 33605, res = 300, units = "px") # initialize png output for plot
 
 plotRGB(ortho_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
 plot(trees_sp, border = "red", lwd = 1.5, bg = "transparent")
