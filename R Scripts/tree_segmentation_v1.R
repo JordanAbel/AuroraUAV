@@ -1,5 +1,5 @@
 # Automatically install and load required packages into R session
-pkg_list <- readLines("/R_requirements.txt")
+pkg_list <- readLines("./R Scripts/R_requirements.txt")
 
 # Check for the existence of each package and install if necessary
 cran_mirror <- "https://cran.r-project.org" # Set the CRAN mirror to use for package installations
