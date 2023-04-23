@@ -1,4 +1,4 @@
-# Automatically install and load required packages into R session
+# Automatically install and load required packages into R session hello
 pkg_list <- readLines("./R Scripts/R_requirements.txt")
 
 # Check for the existence of each package and install if necessary
