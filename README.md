@@ -2,9 +2,9 @@
 
 ## Prerequisites
 Before you begin, ensure that you have the following installed on your computer:
-R
-PyCharm
-Python 3.9
+- R
+- PyCharm
+- Python 3.9
 ## R Installation
 ### Windows
 Visit the CRAN website and click on Download R for Windows.
