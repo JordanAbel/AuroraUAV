@@ -164,15 +164,7 @@ for (x in 1:length(crowns$treeID)) {
 }
 cli_progress_done()
 
-area <- area(las)
-
 write.csv(crowns, "crown_metrics.csv")
-write.table(area,
-            file="crown_metrics.csv",
-            append = T,
-            sep=',',
-            row.names=F,
-            col.names=F)
 
 # =======attempting to transfer tree segments to rgb orthomosaic=======
 trees_sp <- as_Spatial(crowns)
