@@ -173,3 +173,251 @@ layout(matrix(c(1), 1, 1, byrow = TRUE))
 plotRGB(ortho_rgb_cropped, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
 # plotRGB(ortho, r = 1, g = 2, b = 3, stretch = "lin", add = FALSE)
 plot(trees_sp, add = TRUE, border = "red", lwd = 1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#-----------------------Labelling part that creates a Yolo dataset(optional, NOT BEING USED IN SEGMENTATION(only for future team reference))
+
+ trees_sp <- as_Spatial(crowns)
+
+ # ortho - full ortho photo, trees_sp - spatial object containign polygons(crowns)
+ process_data <- function(ortho, trees_sp, install_dependencies = FALSE) {
+
+   if (install_dependencies) {
+     install.packages("grid")
+     install.packages("EBImage")
+     install.packages("magick")
+     install.packages("abind")
+     install.packages("ggimage")
+   }
+
+   library(grid)
+   library(EBImage)
+   library(magick)
+   library(abind)
+   library(ggimage)
+   library(sf)
+   library(raster)
+   library(terra)
+   #in this case we are extending the orthoptho with the tree to be multiple of 32 to match yolo image requirenments
+   extend_bbox_by_buffer <- function(bbox, buffer, xmin, ymin, xmax, ymax) {
+     bbox_extended <- bbox
+     bbox_extended["xmin"] <- max(floor((bbox["xmin"] - buffer) / 32) * 32, xmin)
+     bbox_extended["ymin"] <- max(floor((bbox["ymin"] - buffer) / 32) * 32, ymin)
+     bbox_extended["xmax"] <- min(ceiling((bbox["xmax"] + buffer) / 32) * 32, xmax)
+     bbox_extended["ymax"] <- min(ceiling((bbox["ymax"] + buffer) / 32) * 32, ymax)
+     return(bbox_extended)
+   }
+
+   get_bbox_from_polygon <- function(polygon) {
+     min_x <- min(polygon[, 1])
+     max_x <- max(polygon[, 1])
+     min_y <- min(polygon[, 2])
+     max_y <- max(polygon[, 2])
+
+     return(c(min_x, min_y, max_x, max_y))
+   }
+
+   # function that creates yolo label for individual photo
+   create_yolo_label2 <- function(tree_polygons, ortho, tree_id, output_dir, cropped_bbox, buffer_percentage = 1.6) {
+     tree_sp <- tree_polygons[tree_polygons$treeID == tree_id, ]
+
+     tree_bbox <- st_bbox(tree_sp)
+
+     if (!any(is.na(tree_bbox)) && is_bbox_inside_extent(tree_bbox, terra::ext(ortho))) {
+       # calculating buffer based on a percentage of the square root of the convhull_area and multiplier that we have to specify since default plygons are way too small
+       buffer_distance <- sqrt(tree_sp$convhull_area) * buffer_percentage
+
+       # creating the buffer
+       buffered_tree_sp <- st_buffer(tree_sp, dist = buffer_distance)
+
+       tree_coords <- st_coordinates(st_transform(buffered_tree_sp, st_crs(ortho)))
+
+       tree_bbox_corrected <- get_bbox_from_polygon(tree_coords)
+
+       # normalize the coordinates
+       tree_coords_normalized <- tree_bbox_corrected
+       tree_coords_normalized[1] <- (tree_bbox_corrected[1] - cropped_bbox["xmin"]) / (cropped_bbox["xmax"] - cropped_bbox["xmin"])
+       tree_coords_normalized[2] <- (tree_bbox_corrected[2] - cropped_bbox["ymin"]) / (cropped_bbox["ymax"] - cropped_bbox["ymin"])
+       tree_coords_normalized[3] <- (tree_bbox_corrected[3] - cropped_bbox["xmin"]) / (cropped_bbox["xmax"] - cropped_bbox["xmin"])
+       tree_coords_normalized[4] <- (tree_bbox_corrected[4] - cropped_bbox["ymin"]) / (cropped_bbox["ymax"] - cropped_bbox["ymin"])
+
+       # write to a label file
+       label_file <- file.path(output_dir, paste0("tree_", tree_id, ".txt"))
+       x_center <- (tree_coords_normalized[1] + tree_coords_normalized[3]) / 2
+       y_center <- (tree_coords_normalized[2] + tree_coords_normalized[4]) / 2
+       width <- tree_coords_normalized[3] - tree_coords_normalized[1]
+       height <- tree_coords_normalized[4] - tree_coords_normalized[2]
+       label_line <- paste("0", x_center, y_center, width, height)
+       writeLines(label_line, label_file)
+     } else {
+       cat("Tree with", tree_id, " id, bbox is not valid or outside the ortho extent.\n")
+     }
+   }
+
+
+   # labelling the whole thing:
+   # splitting the dataset folders
+   tree_ids <- unique(trees_sp$treeID)
+   split_indices <- sample.int(length(tree_ids), size = length(tree_ids))
+   train_ids <- tree_ids[split_indices <= 0.7 * length(tree_ids)]
+   valid_ids <- tree_ids[split_indices > 0.7 * length(tree_ids) & split_indices <= 0.85 * length(tree_ids)]
+   test_ids <- tree_ids[split_indices > 0.85 * length(tree_ids)]
+
+   # creating folders for train, validation, and test sets
+   dir.create("data")
+   dir.create("data/train")
+   dir.create("data/train/images")
+   dir.create("data/train/labels")
+   dir.create("data/valid")
+   dir.create("data/valid/images")
+   dir.create("data/valid/labels")
+   dir.create("data/test")
+   dir.create("data/test/images")
+   dir.create("data/test/labels")
+
+   process_tree <- function(tree_id, ortho, tree_polygons, output_dir) {
+     # transforming the tree polygon and computing the bounding box
+     transformed_tree_polygon <- st_transform(tree_polygons[tree_polygons$treeID == tree_id, ], st_crs(ortho))
+     tree_bbox <- st_bbox(transformed_tree_polygon)
+
+     # adding buffer for cropped image and make dimensions of image multiples of 32
+     buffer <- 10 # Adjust this value as needed
+     ortho_xmin <- terra::xmin(ortho)
+     ortho_ymin <- terra::ymin(ortho)
+     ortho_xmax <- terra::xmax(ortho)
+     ortho_ymax <- terra::ymax(ortho)
+     cropped_bbox <- extend_bbox_by_buffer(tree_bbox, buffer, ortho_xmin, ortho_ymin, ortho_xmax, ortho_ymax)
+
+     # write label info to txt
+     create_yolo_label2(tree_polygons, ortho, tree_id, file.path(output_dir, "labels"), cropped_bbox)
+
+     # crop the image
+     cropped_image <- crop(ortho, cropped_bbox)
+
+     # save the image
+     writeRaster(cropped_image, file.path(output_dir, "images", paste0("tree_", tree_id, ".png")))
+   }
+
+   trees_sp_st <- st_as_sf(trees_sp)
+
+   is_bbox_inside_extent <- function(bbox, extent) {
+     if (bbox["xmin"] >= extent[1] & bbox["xmax"] <= extent[2] &
+         bbox["ymin"] >= extent[3] & bbox["ymax"] <= extent[4]) {
+       return(TRUE)
+     } else {
+       return(FALSE)
+     }
+   }
+
+   for (tree_id in train_ids) {
+     process_tree(tree_id, ortho, trees_sp_st, "data/train")
+   }
+
+   for (tree_id in valid_ids) {
+     process_tree(tree_id, ortho, trees_sp_st, "data/valid")
+   }
+
+   for (tree_id in test_ids) {
+     process_tree(tree_id, ortho, trees_sp_st, "data/test")
+   }
+
+
+
+   generate_yaml <- function(train_dir, valid_dir, test_dir, num_classes, class_names, output_file) {
+     yaml_lines <- c(
+       paste0("train: ", train_dir),
+       paste0("val: ", valid_dir),
+       paste0("test: ", test_dir),
+       "",
+       paste0("nc: ", num_classes),
+       paste0("names: ", class_names)
+     )
+
+     writeLines(yaml_lines, output_file)
+   }
+
+   # generating yaml file
+   train_dir <- "../train/images"
+   valid_dir <- "../valid/images"
+   test_dir <- "../test/images"
+
+   # please specify the num of classes and names of classes here
+   num_classes <- 1
+   class_names <- "['tree']"
+
+   output_file <- "data.yaml"
+
+   generate_yaml(train_dir, valid_dir, test_dir, num_classes, class_names, output_file)
+
+
+
+   # code to check accuracy of bounding box by displaying the labelled image with bounding box
+   install.packages("grid")
+   library(grid)
+   install.packages("EBImage")
+   install.packages("magick")
+   install.packages("abind")
+   install.packages("ggimage")
+   library(EBImage)
+   library(magick)
+   library(abind)
+
+   library(ggimage)
+   #paths for image, change to your own
+   image_file <- "/Users/andreimarkov/PycharmProjects/yolotest/train/images/tree_1888.png"
+   label_file <- "/Users/andreimarkov/PycharmProjects/yolotest/train/labels/tree_1888.txt"
+   img <- magick::image_read(image_file)
+
+   label_line <- readLines(label_file)
+
+   # extracting the bounding box coordinates from the label
+   label_data <- strsplit(label_line, " ")[[1]]
+   class_id <- as.integer(label_data[1])
+   x_center <- as.numeric(label_data[2])
+   y_center <- as.numeric(label_data[3])
+   width <- as.numeric(label_data[4])
+   height <- as.numeric(label_data[5])
+
+   # Compute the bounding box
+   img_width <- img_info$width
+   img_height <- img_info$height
+   xmin <- x_center - width / 2
+   ymin <- y_center - height / 2
+   xmax <- x_center + width / 2
+   ymax <- y_center + height / 2
+
+   df <- data.frame(xmin = xmin * img_width, xmax = xmax * img_width, ymin = ymin * img_height, ymax = ymax * img_height)
+
+   #plot the bounding box
+   img_ggplot <- ggplot(data = df) +
+     annotation_custom(rasterGrob(as.raster(img)), xmin = 0, xmax = img_width, ymin = 0, ymax = img_height) +
+     geom_rect(data = df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), color = "red", fill = NA, inherit.aes = FALSE) +
+     coord_fixed(xlim = c(1, img_width), ylim = c(1, img_height), expand = FALSE) +
+     labs(x = NULL, y = NULL) +
+     theme_minimal() +
+     theme(axis.line=element_blank(),
+           axis.text.x=element_blank(),
+           axis.text.y=element_blank(),
+           axis.ticks=element_blank(),
+           axis.title.x=element_blank(),
+           axis.title.y=element_blank())
+
+   print(img_ggplot)
+
+ }
