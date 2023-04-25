@@ -179,11 +179,21 @@ plot(trees_sp, add = TRUE, border = "red", lwd = 1)
 
 
 
-#-----------------------Labelling part that creates a Yolo dataset(optional)
+
+
+
+
+
+
+
+
+
+
+
+
+#-----------------------Labelling part that creates a Yolo dataset(optional, NOT BEING USED IN SEGMENTATION(only for future team reference))
 
  trees_sp <- as_Spatial(crowns)
-
- # process_data(ortho, trees_sp)
 
  # ortho - full ortho photo, trees_sp - spatial object containign polygons(crowns)
  process_data <- function(ortho, trees_sp, install_dependencies = FALSE) {
